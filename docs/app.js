@@ -541,7 +541,7 @@ function AdminList() {
       (F.room || F.slot || F.status || F.q) ? h('button', { class: 'btn ghost', onclick: () => {
         Object.assign(F, { room: '', slot: '', status: '', q: '' }); render(); } }, 'Xoá bộ lọc') : null,
       h('span', { class: 'spacer' }),
-      h('button', { class: 'btn', onclick: () => importCsv() }, 'Nhập CSV'),
+      h('button', { class: 'btn', onclick: () => importFile() }, 'Nhập Excel/CSV'),
       h('button', { class: 'btn', onclick: () => exportCsv(rows) }, 'Xuất CSV'),
       h('button', { class: 'btn primary', onclick: () => editAttendee({
         room_id: Number(F.room) || S.rooms[0]?.id, slot_id: Number(F.slot) || S.slots[0]?.id, event_date: S.date }) }, '+ Thêm khách')),
@@ -826,68 +826,255 @@ function matchDate(v) {
   return null;
 }
 
-function importCsv() {
-  const file = h('input', { type: 'file', accept: '.csv,text/csv' });
+// ---------- Excel (.xlsx) ----------
+// Thư viện SheetJS chỉ tải khi admin mở chức năng nhập file.
+let xlsxLib = null;
+function loadXlsx() {
+  if (!xlsxLib) {
+    xlsxLib = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = () => { xlsxLib = null; reject(new Error('Không tải được thư viện đọc Excel, kiểm tra mạng.')); };
+      document.head.append(s);
+    });
+  }
+  return xlsxLib;
+}
+
+/** Giá trị ô Excel -> chuỗi. Ô ngày -> yyyy-mm-dd, ô giờ -> HH:MM. */
+function cellStr(v) {
+  if (v == null) return '';
+  if (v instanceof Date) {
+    const d = new Date(Math.round(v.getTime() / 60000) * 60000); // làm tròn phút (SheetJS lệch vài giây)
+    if (d.getFullYear() < 1901) return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return d.toLocaleDateString('sv');
+  }
+  if (typeof v === 'number' && v > 0 && v < 1) { // giờ lưu dạng phân số ngày
+    const m = Math.round(v * 1440);
+    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+  }
+  return String(v).trim();
+}
+
+const EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+
+/** Định dạng "mỗi phòng 1 sheet": ô Tên phòng / Người trực (email) / Tên người trực / Ngày + bảng khách. */
+function parseRoomSheet(sheetName, rows) {
+  const errors = [];
+  const meta = { name: '', emails: [], staffName: '', date: '' };
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 30); i++) {
+    const label = norm(cellStr(rows[i][0])).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+    const val = cellStr(rows[i][1]);
+    if (label.startsWith('ten phong')) meta.name = val;
+    else if (label.startsWith('ten nguoi truc')) meta.staffName = val;
+    else if (label.startsWith('nguoi truc')) meta.emails = val.split(/[,;\s]+/).map((x) => x.toLowerCase()).filter(Boolean);
+    else if (label.startsWith('ngay')) meta.date = val;
+    if (rows[i].some((c) => norm(cellStr(c)) === 'ho ten')) { headerIdx = i; break; }
+  }
+  if (headerIdx < 0) return null; // không phải sheet phòng
+
+  const where = `Sheet "${sheetName}"`;
+  const room_id = matchRoom(sheetName) ?? matchRoom(meta.name);
+  if (!room_id) { errors.push(`${where}: không xác định được phòng (đặt tên sheet P1…P${S.rooms.length})`); return { errors, guests: [], room: null }; }
+  const date = matchDate(meta.date);
+  if (!date) errors.push(`${where}: ngày "${meta.date}" không hợp lệ (dùng dd/mm/yyyy)`);
+  const badEmails = meta.emails.filter((e) => !EMAIL_RE.test(e));
+  if (badEmails.length) errors.push(`${where}: email người trực không hợp lệ: ${badEmails.join(', ')}`);
+
+  const head = rows[headerIdx].map((c) => norm(cellStr(c)));
+  const col = (...names) => head.findIndex((x) => names.includes(x));
+  const idx = { slot: col('khung gio', 'gio', 'thoi gian'), name: col('ho ten'), phone: col('sdt', 'so dien thoai', 'dien thoai'),
+    email: col('email'), company: col('cong ty'), note: col('ghi chu') };
+  const get = (r, i) => (i >= 0 ? cellStr(r[i]) : '');
+  const guests = [];
+  let lastSlot = '';
+  rows.slice(headerIdx + 1).forEach((r, n) => {
+    const slotText = get(r, idx.slot) || lastSlot; // ô khung giờ gộp/để trống -> lấy khung phía trên
+    lastSlot = slotText;
+    const name = get(r, idx.name);
+    if (!name) return; // dòng trống
+    const slot_id = matchSlot(slotText);
+    if (!slot_id) { errors.push(`${where} dòng ${headerIdx + n + 2}: khung giờ "${slotText}" không có`); return; }
+    if (date) guests.push({ event_date: date, room_id, slot_id, full_name: name, phone: get(r, idx.phone) || null,
+      email: get(r, idx.email) || null, company: get(r, idx.company) || null, note: get(r, idx.note) || null });
+  });
+  return { errors, guests, room: { room_id, sheetName, name: meta.name, emails: meta.emails.filter((e) => EMAIL_RE.test(e)),
+    staffName: meta.staffName, date: meta.date ? date : null, count: guests.length } };
+}
+
+/** Định dạng "1 bảng phẳng": cột phong, khung_gio, ho_ten, ... (CSV hoặc 1 sheet Excel). */
+function parseFlatRows(rows, label) {
+  const head = rows[0].map((x) => norm(cellStr(x)).replace(/\s+/g, '_'));
+  const col = (...names) => head.findIndex((x) => names.includes(x));
+  const idx = {
+    date: col('ngay', 'date', 'event_date'), room: col('phong', 'room', 'room_id'),
+    slot: col('khung_gio', 'khung', 'gio', 'slot', 'time'), name: col('ho_ten', 'ten', 'name', 'full_name', 'ho_va_ten'),
+    phone: col('sdt', 'so_dien_thoai', 'phone', 'dien_thoai'), email: col('email'),
+    company: col('cong_ty', 'company'), note: col('ghi_chu', 'note'),
+  };
+  if (idx.room < 0 || idx.slot < 0 || idx.name < 0) return null;
+  const get = (r, i) => (i >= 0 ? cellStr(r[i]) : '');
+  const errors = [], guests = [];
+  rows.slice(1).forEach((r, n) => {
+    if (!r.some((c) => cellStr(c))) return;
+    const rec = {
+      event_date: matchDate(get(r, idx.date)), room_id: matchRoom(get(r, idx.room)), slot_id: matchSlot(get(r, idx.slot)),
+      full_name: get(r, idx.name), phone: get(r, idx.phone) || null, email: get(r, idx.email) || null,
+      company: get(r, idx.company) || null, note: get(r, idx.note) || null,
+    };
+    const bad = [!rec.full_name && 'thiếu tên', !rec.room_id && `phòng "${get(r, idx.room)}"`,
+      !rec.slot_id && `khung giờ "${get(r, idx.slot)}"`, !rec.event_date && `ngày "${get(r, idx.date)}"`].filter(Boolean);
+    if (bad.length) errors.push(`${label} dòng ${n + 2}: ${bad.join(', ')}`); else guests.push(rec);
+  });
+  return { errors, guests, room: null };
+}
+
+async function parseImportFile(f) {
+  const out = { rooms: [], guests: [], errors: [] };
+  const add = (res) => { if (!res) return; out.errors.push(...res.errors); out.guests.push(...res.guests); if (res.room) out.rooms.push(res.room); };
+  if (/\.csv$/i.test(f.name) || f.type === 'text/csv') {
+    const rows = parseCsv(await f.text());
+    const res = rows.length > 1 ? parseFlatRows(rows, 'CSV') : null;
+    if (!res) out.errors.push('CSV cần có cột: phong, khung_gio, ho_ten.');
+    add(res);
+    return out;
+  }
+  const XLSX = await loadXlsx();
+  const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
+  for (const name of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' });
+    if (!rows.length || /^huong dan/.test(norm(name))) continue;
+    add(parseRoomSheet(name, rows) ?? parseFlatRows(rows, `Sheet "${name}"`));
+  }
+  if (!out.guests.length && !out.rooms.length && !out.errors.length) out.errors.push('Không tìm thấy sheet phòng nào. Dùng file mẫu.');
+  return out;
+}
+
+const guestKey = (g) => `${g.event_date}|${g.room_id}|${g.slot_id}|${norm(g.full_name).replace(/\s+/g, ' ').trim()}`;
+
+async function runImport(data) {
+  const report = { guests: 0, dup: 0, staff: 0, assign: 0, renamed: 0 };
+  const fail = (step, error) => { throw new Error(`${step}: ${errMsg(error)}`); };
+
+  // 1. Đổi tên phòng theo ô "Tên phòng"
+  const renames = data.rooms.filter((r) => r.name && r.name !== roomName(r.room_id));
+  if (renames.length) {
+    const map = new Map(renames.map((r) => [r.room_id, r.name]));
+    const { error } = await sb.from('rooms').upsert(S.rooms.filter((r) => map.has(r.id)).map((r) => ({ ...r, name: map.get(r.id) })));
+    if (error) fail('Đổi tên phòng', error);
+    report.renamed = renames.length;
+  }
+
+  // 2. Thêm ngày mới vào danh sách ngày sự kiện
+  const dates = [...new Set(data.guests.map((g) => g.event_date))];
+  const newDates = dates.filter((d) => !(S.settings.event_dates || []).includes(d));
+  if (newDates.length) {
+    const { error } = await sb.from('settings').update({ event_dates: [...(S.settings.event_dates || []), ...newDates].sort() }).eq('id', true);
+    if (error) fail('Thêm ngày', error);
+  }
+
+  // 3. Người trực: tạo tài khoản (nếu chưa có) + phân công phòng
+  if (data.rooms.some((r) => r.emails.length)) {
+    const [st, as] = await Promise.all([sb.from('staff').select('*'), sb.from('room_assignments').select('*')]);
+    if (st.error || as.error) fail('Đọc nhân sự', st.error || as.error);
+    const known = new Set(st.data.map((s) => s.email));
+    const assigned = new Set(as.data.map((a) => `${a.email}|${a.room_id}|${a.event_date ?? ''}`));
+    for (const r of data.rooms) {
+      for (const email of r.emails) {
+        if (!known.has(email)) {
+          const { error } = await sb.from('staff').insert({ email, full_name: r.staffName || null, role: 'staff' });
+          if (error) fail(`Thêm ${email}`, error);
+          known.add(email); report.staff++;
+        }
+        const key = `${email}|${r.room_id}|${r.date ?? ''}`;
+        if (!assigned.has(key)) {
+          const { error } = await sb.from('room_assignments').insert({ email, room_id: r.room_id, event_date: r.date });
+          if (error) fail(`Phân công ${email}`, error);
+          assigned.add(key); report.assign++;
+        }
+      }
+    }
+  }
+
+  // 4. Khách: bỏ qua người đã có (cùng ngày, phòng, khung giờ, họ tên)
+  const existing = new Set();
+  for (const d of dates) {
+    const { data: rows, error } = await sb.from('attendees').select('*').eq('event_date', d).limit(10000);
+    if (error) fail('Đọc danh sách hiện có', error);
+    rows.forEach((g) => existing.add(guestKey(g)));
+  }
+  const fresh = [];
+  for (const g of data.guests) {
+    const k = guestKey(g);
+    if (existing.has(k)) { report.dup++; continue; }
+    existing.add(k); fresh.push(g);
+  }
+  for (let i = 0; i < fresh.length; i += 500) {
+    const { error } = await sb.from('attendees').insert(fresh.slice(i, i + 500));
+    if (error) fail(`Nhập khách (lô ${i / 500 + 1})`, error);
+  }
+  report.guests = fresh.length;
+  return report;
+}
+
+function importFile() {
+  const file = h('input', { type: 'file', accept: '.xlsx,.xls,.csv' });
   const preview = h('div', { class: 'stack' });
-  let parsed = [];
+  let parsed = null;
 
   file.addEventListener('change', async () => {
     const f = file.files[0];
     if (!f) return;
-    const rows = parseCsv(await f.text());
-    if (rows.length < 2) { preview.replaceChildren(h('p', { class: 'error' }, 'File không có dữ liệu.')); return; }
-    const head = rows[0].map((x) => norm(x).trim().replace(/\s+/g, '_'));
-    const col = (...names) => head.findIndex((x) => names.includes(x));
-    const idx = {
-      date: col('ngay', 'date', 'event_date'), room: col('phong', 'room', 'room_id'),
-      slot: col('khung_gio', 'khung', 'gio', 'slot', 'time'), name: col('ho_ten', 'ten', 'name', 'full_name', 'ho_va_ten'),
-      phone: col('sdt', 'so_dien_thoai', 'phone', 'dien_thoai'), email: col('email'),
-      company: col('cong_ty', 'company'), note: col('ghi_chu', 'note'),
-    };
-    if (idx.room < 0 || idx.slot < 0 || idx.name < 0) {
-      preview.replaceChildren(h('p', { class: 'error' }, 'Cần có cột: phong, khung_gio, ho_ten. Tải file mẫu để xem định dạng.'));
-      return;
-    }
-    const get = (r, i) => (i >= 0 ? (r[i] ?? '').trim() : '');
-    const errors = [];
-    parsed = [];
-    rows.slice(1).forEach((r, n) => {
-      const line = n + 2;
-      const rec = {
-        event_date: matchDate(get(r, idx.date)), room_id: matchRoom(get(r, idx.room)), slot_id: matchSlot(get(r, idx.slot)),
-        full_name: get(r, idx.name), phone: get(r, idx.phone) || null, email: get(r, idx.email) || null,
-        company: get(r, idx.company) || null, note: get(r, idx.note) || null,
-      };
-      const bad = [!rec.full_name && 'thiếu tên', !rec.room_id && `phòng "${get(r, idx.room)}"`,
-        !rec.slot_id && `khung giờ "${get(r, idx.slot)}"`, !rec.event_date && `ngày "${get(r, idx.date)}"`].filter(Boolean);
-      if (bad.length) errors.push(`Dòng ${line}: ${bad.join(', ')}`); else parsed.push(rec);
-    });
-    const byDate = {};
-    parsed.forEach((p) => { byDate[p.event_date] = (byDate[p.event_date] || 0) + 1; });
-    preview.replaceChildren(
-      h('p', null, h('strong', null, `${parsed.length} khách hợp lệ`), ' — ',
-        Object.entries(byDate).map(([d, c]) => `${fmtDate(d)}: ${c}`).join(', ')),
-      errors.length ? h('details', { open: errors.length < 6 }, h('summary', { class: 'error' }, `${errors.length} dòng lỗi (sẽ bỏ qua)`),
-        h('ul', { class: 'small' }, errors.slice(0, 100).map((e) => h('li', null, e)))) : null);
-    importBtn.disabled = !parsed.length;
+    importBtn.disabled = true;
+    preview.replaceChildren(h('p', { class: 'muted' }, 'Đang đọc file…'));
+    try { parsed = await parseImportFile(f); }
+    catch (e) { preview.replaceChildren(h('p', { class: 'error' }, e.message)); return; }
+
+    const roomTable = parsed.rooms.length ? h('div', { class: 'scroll-x' }, h('table', { class: 'preview' },
+      h('thead', null, h('tr', null, h('th', null, 'Sheet'), h('th', null, 'Phòng'), h('th', null, 'Người trực'), h('th', null, 'Ngày'), h('th', null, 'Khách'))),
+      h('tbody', null, parsed.rooms.map((r) => h('tr', null,
+        h('td', null, r.sheetName),
+        h('td', null, r.name || roomName(r.room_id)),
+        h('td', null, r.emails.length ? r.emails.join(', ') : h('span', { class: 'error' }, 'chưa điền')),
+        h('td', null, r.date ? fmtDate(r.date) : `${fmtDate(S.date)} (đang chọn)`),
+        h('td', { class: 'num' }, r.count)))))) : null;
+
+    preview.replaceChildren(...[
+      h('p', null, h('strong', null, `${parsed.guests.length} khách`),
+        parsed.rooms.length ? ` trong ${parsed.rooms.length} phòng` : '', '. Khách đã có sẵn (trùng tên trong cùng khung giờ) sẽ được bỏ qua.'),
+      roomTable,
+      parsed.rooms.some((r) => r.emails.length) ? h('p', { class: 'small muted' },
+        'Email người trực sẽ được thêm vào Nhân sự và phân công đúng phòng. Chỉ những email này (và admin) đăng nhập được.') : null,
+      parsed.errors.length ? h('details', { open: parsed.errors.length < 6 },
+        h('summary', { class: 'error' }, `${parsed.errors.length} lỗi (dòng lỗi sẽ bỏ qua)`),
+        h('ul', { class: 'small' }, parsed.errors.slice(0, 100).map((e) => h('li', null, e)))) : null,
+    ].filter(Boolean));
+    importBtn.disabled = !parsed.guests.length && !parsed.rooms.some((r) => r.emails.length);
   });
 
   const importBtn = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: async () => {
     importBtn.disabled = true;
-    for (let i = 0; i < parsed.length; i += 500) {
-      const { error } = await sb.from('attendees').insert(parsed.slice(i, i + 500));
-      if (error) { importBtn.disabled = false; return toast(`Lỗi ở lô ${i / 500 + 1}: ${errMsg(error)}`, 'error'); }
+    importBtn.textContent = 'Đang nhập…';
+    try {
+      const r = await runImport(parsed);
+      toast(`Đã nhập ${r.guests} khách` + (r.dup ? `, bỏ qua ${r.dup} trùng` : '') +
+        (r.staff ? `, thêm ${r.staff} người trực` : '') + (r.assign ? `, ${r.assign} phân công` : ''), 'success');
+      close();
+      await reloadConfig('Đã cập nhật phòng & ngày');
+      await refresh();
+    } catch (e) {
+      toast(e.message, 'error');
+      importBtn.disabled = false; importBtn.textContent = 'Nhập dữ liệu';
+      await refresh();
     }
-    toast(`Đã nhập ${parsed.length} khách`, 'success');
-    close(); await refresh();
   } }, 'Nhập dữ liệu');
 
-  const close = openModal('Nhập danh sách từ CSV', h('div', { class: 'stack' },
-    h('p', { class: 'small' }, 'Cột bắt buộc: ', h('code', null, 'phong'), ', ', h('code', null, 'khung_gio'), ', ', h('code', null, 'ho_ten'),
-      '. Tuỳ chọn: ', h('code', null, 'ngay'), ' (trống = ngày đang xem), ', h('code', null, 'sdt, email, cong_ty, ghi_chu'),
-      '. Phòng ghi số (1–8) hoặc tên; khung giờ ghi giờ bắt đầu (09:00, 9h).'),
-    h('button', { type: 'button', class: 'btn small', onclick: () => downloadCsv('mau-danh-sach.csv', [CSV_HEADER,
-      [S.date, '1', '09:00', 'Nguyễn Văn A', '0901234567', 'a@vidu.com', 'Công ty A', ''],
-      [S.date, '2', '10:00', 'Trần Thị B', '0912345678', '', 'Công ty B', 'Khách VIP']]) }, 'Tải file mẫu'),
+  const close = openModal('Nhập danh sách từ Excel / CSV', h('div', { class: 'stack' },
+    h('p', { class: 'small' }, 'Dùng file mẫu: mỗi phòng 1 sheet (P1…P8), điền Tên phòng, email Người trực, Ngày và danh sách khách theo khung giờ.'),
+    h('div', { class: 'toolbar wrap-row' },
+      h('a', { class: 'btn small', href: 'mau-danh-sach.xlsx', download: true }, 'Tải file mẫu (trống)'),
+      h('a', { class: 'btn small', href: 'du-lieu-mau.xlsx', download: true }, 'Tải dữ liệu mẫu để chạy thử')),
     file, preview), [h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Đóng'), importBtn]);
 }

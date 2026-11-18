@@ -201,3 +201,10 @@ label { font-size: .9rem; }
   .staff-actions { align-items: stretch; width: 100%; }
   .staff-actions .toolbar { justify-content: flex-start; }
 }
+
+/* Import preview */
+.preview { border-collapse: collapse; width: 100%; font-size: .88rem; }
+.preview th, .preview td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.preview th { color: var(--muted); font-weight: 600; }
+.preview td.num { text-align: right; font-variant-numeric: tabular-nums; }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; }

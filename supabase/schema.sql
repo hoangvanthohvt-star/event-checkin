@@ -319,6 +319,35 @@ revoke execute on function public.get_me() from anon, public;
 grant  execute on function public.get_me() to authenticated;
 
 -- ---------------------------------------------------------------------
+-- 5b. CHỈ EMAIL TRONG DANH SÁCH NHÂN SỰ MỚI ĐƯỢC TẠO TÀI KHOẢN
+--     Bật trong Dashboard → Authentication → Hooks → "Before User Created"
+--     → Postgres → chọn hàm public.hook_before_user_created
+-- ---------------------------------------------------------------------
+create or replace function public.hook_before_user_created(event jsonb)
+returns jsonb language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v_email text := lower(coalesce(event -> 'user' ->> 'email', ''));
+begin
+  if exists (select 1 from public.staff s where s.email = v_email and s.active) then
+    return '{}'::jsonb;  -- cho phép
+  end if;
+  return jsonb_build_object('error', jsonb_build_object(
+    'http_code', 403,
+    'message', 'Email này chưa được cấp quyền truy cập. Vui lòng liên hệ admin.'));
+end;
+$$;
+
+revoke execute on function public.hook_before_user_created(jsonb) from public, anon, authenticated;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'supabase_auth_admin') then
+    grant execute on function public.hook_before_user_created(jsonb) to supabase_auth_admin;
+  end if;
+end $$;
+
+-- ---------------------------------------------------------------------
 -- 6. REALTIME (cập nhật màn hình tức thì; Realtime tự áp dụng RLS)
 -- ---------------------------------------------------------------------
 do $$

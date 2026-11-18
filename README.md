@@ -41,6 +41,7 @@ Dashboard → **Authentication**:
   <p><a href="{{ .ConfirmationURL }}">Bấm vào đây để đăng nhập</a></p>
   <p>Hoặc nhập mã: <strong>{{ .Token }}</strong></p>
   ```
+- **Hooks → Before User Created → Add hook → Postgres:** chọn schema `public`, hàm `hook_before_user_created`, rồi bấm Save. **Bước này bắt buộc.** Sau khi bật, chỉ những email có trong tab Nhân sự mới tạo được tài khoản; email lạ nhập vào sẽ bị từ chối ngay, không nhận được link đăng nhập.
 - **Gửi email:** server email mặc định của Supabase chỉ gửi được **vài email mỗi giờ**. Trước ngày sự kiện, hãy cấu hình **SMTP riêng** (Authentication → Emails → SMTP Settings), ví dụ Resend, Brevo hoặc Gmail Workspace. Nếu không, 9 người đăng nhập cùng lúc sẽ bị nghẽn.
 
 ### 4. Điền config
@@ -61,10 +62,17 @@ Không bao giờ dùng `service_role` / secret key ở đây.
 1. Đăng nhập bằng email admin.
 2. **Cài đặt:** đặt tên sự kiện, sức chứa (mặc định 10), **thêm các ngày diễn ra sự kiện**, đổi tên phòng và chỉnh khung giờ nếu cần.
 3. **Nhân sự:** thêm email 8 người trực và phân công phòng, "mọi ngày" hoặc từng ngày cụ thể. Phòng nào chưa có người trực sẽ hiện cảnh báo vàng.
-4. **Danh sách khách → Nhập CSV:** bấm "Tải file mẫu" để lấy định dạng.
-   - Cột bắt buộc: `phong` (1–8 hoặc tên phòng), `khung_gio` (09:00 / 9h), `ho_ten`.
-   - Cột tuỳ chọn: `ngay` (yyyy-mm-dd hoặc dd/mm/yyyy, để trống thì lấy ngày đang xem), `sdt`, `email`, `cong_ty`, `ghi_chu`.
-   - Excel lưu dạng *CSV UTF-8* là được. Dấu phân cách `,` hay `;` đều đọc được.
+4. **Danh sách khách → Nhập Excel/CSV:** tải **file mẫu** `mau-danh-sach.xlsx` (hoặc `du-lieu-mau.xlsx` có sẵn dữ liệu giả để chạy thử).
+   - Mỗi phòng một sheet `P1`…`P8`. Ở đầu sheet, điền các ô nền vàng:
+     - **Tên phòng**
+     - **Người trực (email)**: người được quyền xem phòng đó. Nhiều người thì cách nhau dấu phẩy.
+     - **Tên người trực**
+     - **Ngày**: để trống thì lấy ngày đang chọn trên trang.
+   - Bên dưới là bảng khách: cột Khung giờ đã điền sẵn 10 dòng mỗi khung, bạn chỉ cần điền Họ tên, SĐT, Email, Công ty, Ghi chú. Dòng nào bỏ trống Họ tên sẽ bị bỏ qua.
+   - Khi nhập, trang sẽ đổi tên phòng, **tạo tài khoản người trực và phân công đúng phòng**, rồi thêm khách. Nhập lại cùng file không tạo khách trùng.
+   - Sự kiện nhiều ngày: copy sheet phòng và đổi ô Ngày.
+   - Vẫn nhận CSV dạng bảng phẳng, với các cột `phong`, `khung_gio`, `ho_ten` (bắt buộc) và `ngay`, `sdt`, `email`, `cong_ty`, `ghi_chu`.
+   - Muốn tạo lại file mẫu: `python3 tools/make_template.py` (thêm `--sample` để có dữ liệu giả).
 
 ### Trong ngày sự kiện
 - **Người trực** mở link trên điện thoại. App tự chọn khung giờ hiện tại; họ bấm **Check-in** khi khách đến, hoặc **+ Thêm khách** cho walk-in. Khi khung giờ đã đủ sức chứa, nút thêm bị khoá và database cũng từ chối, kể cả khi 2 người cùng bấm một lúc.
@@ -88,5 +96,9 @@ Toàn bộ các luật trên nằm trong `schema.sql` (policies + trigger `atten
 
 ## Lưu ý bảo mật
 - Khi một người trực nghỉ, hãy bấm **Khoá** để họ mất quyền ngay lập tức, kể cả khi họ còn đăng nhập.
-- Bất kỳ ai cũng có thể *đăng ký* tài khoản bằng magic link, nhưng nếu email không có trong bảng nhân sự thì họ không thấy dữ liệu gì. Muốn chặn hẳn: Authentication → Sign In / Providers → tắt *Allow new users to sign up*, rồi tạo user cho người trực ở Authentication → Users → *Invite user*.
+- **Ai vào được?** Chỉ email có trong tab Nhân sự (đang hoạt động). Có 3 lớp bảo vệ:
+  1. **Auth Hook** (bước 3): email lạ không tạo được tài khoản, nên không nhận được link đăng nhập.
+  2. **Magic link / mã OTP** gửi vào hộp thư: phải mở được hộp thư của email đó mới đăng nhập được, nên không cần mật khẩu.
+  3. **RLS trong database:** kể cả người đã có tài khoản, nếu bị xoá hoặc khoá khỏi Nhân sự thì không đọc được dòng dữ liệu nào. Người trực chỉ đọc được phòng mình.
+- Trang HTML trên GitHub Pages là công khai: ai có link đều thấy **màn hình đăng nhập** và mã nguồn, nhưng **không thấy dữ liệu**. Danh sách khách chỉ nằm trong Supabase. Nếu muốn ẩn cả màn hình đăng nhập, hãy đặt trang sau Cloudflare Access hoặc dùng Netlify có mật khẩu.
 - Bật **Point-in-time / daily backups** nếu dùng gói trả phí, hoặc xuất CSV cuối mỗi ngày.
