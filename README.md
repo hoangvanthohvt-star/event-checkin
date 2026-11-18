@@ -85,6 +85,18 @@ Không bao giờ dùng `service_role` / secret key ở đây.
    - Vẫn nhận CSV dạng bảng phẳng, với các cột `phong`, `khung_gio`, `ho_ten` (bắt buộc) và `ngay`, `sdt`, `email`, `cong_ty`, `ghi_chu`.
    - Muốn tạo lại file mẫu: `python3 tools/make_template.py` (thêm `--sample` để có dữ liệu giả).
 
+### Cập nhật Excel trong lúc diễn ra sự kiện (đồng bộ)
+Sửa file master trên máy rồi tải lên lại: **Danh sách khách → Nhập Excel/CSV**. Ô **"Đồng bộ với file"** mặc định được bật với file master.
+- Khách mới có trong file thì được **thêm**.
+- Khách không còn trong file thì chuyển sang **Đã huỷ**. Không xoá hẳn: vẫn còn trong Nhật ký và bấm **Khôi phục** được.
+- Khách đã huỷ mà quay lại file thì được **khôi phục**.
+- Cuộc họp được thêm, sửa hoặc xoá theo file.
+- **Luôn giữ nguyên** người đã check-in và khách walk-in do người trực thêm, kể cả khi họ không có trong file.
+- Chỉ áp dụng cho các phòng và ngày có trong file. Trước khi huỷ hoặc khôi phục ai, trang hiện danh sách để bạn xác nhận.
+- Với CSV hoặc file lẻ, ô đồng bộ mặc định **tắt**: trang chỉ thêm khách mới.
+
+Muốn sửa nhanh 1–2 người thì sửa trực tiếp trên web: **Sửa** (đổi phòng, giờ, thông tin), **+ Thêm khách**, **Xoá hẳn**, hoặc **Sửa cuộc họp**. Người trực thấy thay đổi ngay mà không cần tải lại trang.
+
 ### Trong ngày sự kiện
 - **Người trực** mở link trên điện thoại. App tự chọn khung giờ hiện tại; họ bấm **Check-in** khi khách đến, hoặc **+ Thêm khách** cho walk-in. Khi khung giờ đã đủ sức chứa, nút thêm bị khoá và database cũng từ chối, kể cả khi 2 người cùng bấm một lúc.
 - **Admin** xem lưới tổng quan 8×7 cập nhật realtime, bấm vào ô để xem danh sách. Bấm **Sửa** để chuyển khách sang phòng/khung giờ khác. Admin được phép vượt sức chứa (ô sẽ hiện màu đỏ).

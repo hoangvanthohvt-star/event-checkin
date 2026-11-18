@@ -1118,13 +1118,76 @@ const keyText = (t) => norm(t).replace(/\s+/g, ' ').trim();
 // Trùng = cùng ngày, phòng, khung giờ, họ tên VÀ công ty ("Alex - East Cap" khác "Alex - Fiera")
 const guestKey = (g) => `${g.event_date}|${g.room_id}|${g.slot_id}|${keyText(g.full_name)}|${keyText(g.company)}`;
 
-async function runImport(data, blockDates, removeRooms) {
-  const report = { guests: 0, dup: 0, staff: 0, assign: 0, meetings: 0, roomsRemoved: 0, roomsKept: [] };
+/** So sánh file với dữ liệu trên web. sync = true: khách không còn trong file → huỷ, cuộc họp không còn → xoá. */
+async function planImport(guests, meetings, rooms, sync) {
+  const fail = (step, error) => { throw new Error(`${step}: ${errMsg(error)}`); };
+  // Phạm vi đồng bộ: các cặp (ngày, phòng) mà file có nói tới — phòng khác / ngày khác không bị đụng tới
+  const scope = new Set([
+    ...rooms.map((r) => `${r.event_date ?? r.date ?? S.date}|${r.room_id}`),
+    ...guests.map((g) => `${g.event_date}|${g.room_id}`),
+    ...meetings.map((m) => `${m.event_date}|${m.room_id}`),
+  ]);
+  const dates = [...new Set([...scope].map((k) => k.split('|')[0]))];
+  const rows = [], oldMeetings = [];
+  for (const d of dates) {
+    const [a, m] = await Promise.all([
+      sb.from('attendees').select('*').eq('event_date', d).limit(10000),
+      sb.from('meetings').select('*').eq('event_date', d),
+    ]);
+    if (a.error || m.error) fail('Đọc dữ liệu hiện có', a.error || m.error);
+    rows.push(...a.data); oldMeetings.push(...m.data);
+  }
+  const byKey = new Map();
+  for (const r of rows) { const k = guestKey(r); if (!byKey.has(k) || byKey.get(k).status === 'cancelled') byKey.set(k, r); }
+  const fileKeys = new Set();
+  const plan = { add: [], restore: [], cancel: [], same: 0, dupInFile: 0, mAdd: [], mUpdate: [], mDelete: [] };
+  for (const g of guests) {
+    const k = guestKey(g);
+    if (fileKeys.has(k)) { plan.dupInFile++; continue; }
+    fileKeys.add(k);
+    const ex = byKey.get(k);
+    if (!ex) plan.add.push(g);
+    else if (sync && ex.status === 'cancelled') plan.restore.push(ex);
+    else plan.same++;
+  }
+  if (sync) {
+    // Chỉ huỷ khách "đã đăng ký"/"vắng" do nhập file; giữ người đã check-in và walk-in người trực thêm
+    plan.cancel = rows.filter((r) => scope.has(`${r.event_date}|${r.room_id}`) && !fileKeys.has(guestKey(r))
+      && (r.status === 'registered' || r.status === 'no_show') && !r.is_walk_in);
+  }
+  const mKey = (m) => `${m.event_date}|${m.room_id}|${m.slot_id}`;
+  const oldM = new Map(oldMeetings.map((m) => [mKey(m), m]));
+  const fileM = new Set();
+  for (const m of meetings) {
+    if (fileM.has(mKey(m))) continue;
+    fileM.add(mKey(m));
+    const old = oldM.get(mKey(m));
+    if (!old) plan.mAdd.push(m);
+    else if (old.title !== m.title || (old.host ?? null) !== (m.host ?? null)) plan.mUpdate.push({ id: old.id, title: m.title, host: m.host });
+  }
+  if (sync) plan.mDelete = oldMeetings.filter((m) => scope.has(`${m.event_date}|${m.room_id}`) && !fileM.has(mKey(m)));
+  return plan;
+}
+
+async function updateIds(table, ids, patch, step) {
+  for (let i = 0; i < ids.length; i += 200) {
+    const { error } = await sb.from(table).update(patch).in('id', ids.slice(i, i + 200));
+    if (error) throw new Error(`${step}: ${errMsg(error)}`);
+  }
+}
+
+async function runImport(data, blockDates, removeRooms, sync = false, confirmPlan = async () => true) {
+  const report = { guests: 0, dup: 0, staff: 0, assign: 0, meetings: 0, roomsRemoved: 0, roomsKept: [],
+    cancelled: 0, restored: 0, meetingsDeleted: 0 };
   const fail = (step, error) => { throw new Error(`${step}: ${errMsg(error)}`); };
   const withDate = (x) => (x._block == null ? x : (({ _block, ...rest }) => ({ ...rest, event_date: blockDates[_block], ...(x.emails ? { date: blockDates[_block] } : {}) }))(x));
   const guests = data.guests.map(withDate);
   const meetings = data.meetings.map(withDate);
   const rooms = data.rooms.map(withDate);
+
+  // 0. Tính trước thay đổi và hỏi xác nhận (khi đồng bộ có huỷ/khôi phục)
+  const plan = await planImport(guests, meetings, rooms, sync);
+  if (!(await confirmPlan(plan))) return null;
 
   // 1. Phòng: tạo/đổi tên/sức chứa theo file
   if (data.roomDefs.length) {
@@ -1176,49 +1239,34 @@ async function runImport(data, blockDates, removeRooms) {
     }
   }
 
-  // 4. Cuộc họp: thêm mới hoặc cập nhật tên/người chủ trì
-  if (meetings.length) {
-    const existing = new Map();
-    for (const d of new Set(meetings.map((m) => m.event_date))) {
-      const { data: rows, error } = await sb.from('meetings').select('*').eq('event_date', d);
-      if (error) fail('Đọc cuộc họp', error);
-      rows.forEach((m) => existing.set(`${m.event_date}|${m.room_id}|${m.slot_id}`, m));
-    }
-    const fresh = [];
-    for (const m of meetings) {
-      const old = existing.get(`${m.event_date}|${m.room_id}|${m.slot_id}`);
-      if (!old) { fresh.push(m); existing.set(`${m.event_date}|${m.room_id}|${m.slot_id}`, m); continue; }
-      if (old.title !== m.title || (old.host ?? null) !== (m.host ?? null)) {
-        const { error } = await sb.from('meetings').update({ title: m.title, host: m.host }).eq('id', old.id);
-        if (error) fail('Cập nhật cuộc họp', error);
-        report.meetings++;
-      }
-    }
-    if (fresh.length) {
-      const { error } = await sb.from('meetings').insert(fresh);
-      if (error) fail('Thêm cuộc họp', error);
-      report.meetings += fresh.length;
-    }
+  // 4. Cuộc họp
+  if (plan.mAdd.length) {
+    const { error } = await sb.from('meetings').insert(plan.mAdd);
+    if (error) fail('Thêm cuộc họp', error);
   }
+  for (const m of plan.mUpdate) {
+    const { error } = await sb.from('meetings').update({ title: m.title, host: m.host }).eq('id', m.id);
+    if (error) fail('Cập nhật cuộc họp', error);
+  }
+  for (const m of plan.mDelete) {
+    const { error } = await sb.from('meetings').delete().eq('id', m.id);
+    if (error) fail('Xoá cuộc họp', error);
+  }
+  report.meetings = plan.mAdd.length + plan.mUpdate.length;
+  report.meetingsDeleted = plan.mDelete.length;
 
-  // 5. Khách: bỏ qua người đã có (cùng ngày, phòng, khung giờ, họ tên)
-  const existing = new Set();
-  for (const d of dates) {
-    const { data: rows, error } = await sb.from('attendees').select('*').eq('event_date', d).limit(10000);
-    if (error) fail('Đọc danh sách hiện có', error);
-    rows.forEach((g) => existing.add(guestKey(g)));
-  }
-  const fresh = [];
-  for (const g of guests) {
-    const k = guestKey(g);
-    if (existing.has(k)) { report.dup++; continue; }
-    existing.add(k); fresh.push(g);
-  }
-  for (let i = 0; i < fresh.length; i += 500) {
-    const { error } = await sb.from('attendees').insert(fresh.slice(i, i + 500));
+  // 5. Khách: thêm mới / khôi phục / huỷ
+  for (let i = 0; i < plan.add.length; i += 500) {
+    const { error } = await sb.from('attendees').insert(plan.add.slice(i, i + 500));
     if (error) fail(`Nhập khách (lô ${i / 500 + 1})`, error);
   }
-  report.guests = fresh.length;
+  await updateIds('attendees', plan.restore.map((r) => r.id), { status: 'registered' }, 'Khôi phục khách');
+  await updateIds('attendees', plan.cancel.map((r) => r.id), { status: 'cancelled' }, 'Huỷ khách');
+  report.restored = plan.restore.length;
+  report.cancelled = plan.cancel.length;
+  report.dup = plan.same;
+  report.dupInFile = plan.dupInFile;
+  report.guests = plan.add.length;
   return report;
 }
 
@@ -1230,6 +1278,7 @@ function importFile() {
   let parsed = null;
   let dateInputs = [];
   let removeBox = null;
+  const syncBox = h('input', { type: 'checkbox', checked: true });
 
   file.addEventListener('change', async () => {
     const f = file.files[0];
@@ -1239,6 +1288,8 @@ function importFile() {
     try { parsed = await parseImportFile(f); }
     catch (e) { preview.replaceChildren(h('p', { class: 'error' }, e.message)); return; }
 
+    // Đồng bộ mặc định chỉ bật cho file master (lịch đầy đủ); file lẻ/CSV mặc định chỉ THÊM khách
+    syncBox.checked = parsed.blocks.length > 0;
     // Khối ngày (định dạng master): chọn ngày cho từng khối
     const evDates = [...(S.settings.event_dates || [])].sort();
     dateInputs = parsed.blocks.map((b, i) => h('input', { type: 'date', required: true, 'aria-label': `Ngày của khối ${i + 1}`,
@@ -1274,6 +1325,9 @@ function importFile() {
       removeBox ? h('label', { class: 'field checkbox' }, removeBox,
         `Xoá phòng không có trong file: ${extra.map((r) => r.name).join(', ')} (chỉ khi phòng chưa có khách)`) : null,
       roomTable,
+      h('label', { class: 'field checkbox sync-box' }, syncBox,
+        h('span', null, h('strong', null, 'Đồng bộ với file'), ': khách không còn trong file sẽ chuyển sang "Đã huỷ", cuộc họp không còn sẽ bị xoá. ',
+          'Người đã check-in và khách walk-in luôn được giữ. Chỉ áp dụng cho các phòng & ngày có trong file.')),
       staffEmails.length ? h('p', { class: 'small muted' },
         `Người trực sẽ được thêm vào Nhân sự và phân công đúng phòng: ${staffEmails.join(', ')}`) :
         parsed.blocks.length ? h('p', { class: 'small muted' },
@@ -1292,9 +1346,24 @@ function importFile() {
     importBtn.disabled = true;
     importBtn.textContent = 'Đang nhập…';
     try {
-      const r = await runImport(parsed, blockDates, removeBox?.checked);
-      toast(`Đã nhập ${r.guests} khách` + (r.dup ? `, bỏ qua ${r.dup} trùng` : '') +
-        (r.meetings ? `, ${r.meetings} cuộc họp` : '') +
+      const r = await runImport(parsed, blockDates, removeBox?.checked, syncBox.checked, async (plan) => {
+        if (!plan.cancel.length && !plan.restore.length && !plan.mDelete.length) return true;
+        const names = (list) => list.slice(0, 8).map((g) => `${g.full_name} (${roomName(g.room_id)}, ${hhmm(slotById(g.slot_id)?.start_time)}, ${fmtDate(g.event_date)})`).join('; ')
+          + (list.length > 8 ? `; … và ${list.length - 8} người khác` : '');
+        return confirmBox([
+          `Thêm mới: ${plan.add.length} khách.`,
+          plan.cancel.length ? `Huỷ ${plan.cancel.length} khách không còn trong file: ${names(plan.cancel)}.` : '',
+          plan.restore.length ? `Khôi phục ${plan.restore.length} khách đã huỷ: ${names(plan.restore)}.` : '',
+          plan.mDelete.length ? `Xoá ${plan.mDelete.length} cuộc họp không còn trong file: ${plan.mDelete.map((m) => `${m.title} (${roomName(m.room_id)})`).join(', ')}.` : '',
+          'Tiếp tục?',
+        ].filter(Boolean).join('\n\n'), 'Đồng bộ');
+      });
+      if (!r) { importBtn.disabled = false; importBtn.textContent = 'Nhập dữ liệu'; return; }
+      toast(`Đã nhập ${r.guests} khách` + (r.dup ? `, ${r.dup} giữ nguyên` : '') +
+        (r.dupInFile ? `, bỏ ${r.dupInFile} dòng trùng trong file` : '') +
+        (r.cancelled ? `, huỷ ${r.cancelled}` : '') + (r.restored ? `, khôi phục ${r.restored}` : '') +
+        (r.meetingsDeleted ? `, xoá ${r.meetingsDeleted} cuộc họp` : '') +
+        (r.meetings ? `, thêm/sửa ${r.meetings} cuộc họp` : '') +
         (r.staff ? `, thêm ${r.staff} người trực` : '') + (r.assign ? `, ${r.assign} phân công` : '') +
         (r.roomsRemoved ? `, xoá ${r.roomsRemoved} phòng thừa` : '') +
         (r.roomsKept.length ? ` (giữ ${r.roomsKept.join(', ')} vì đang có khách)` : ''), 'success');
