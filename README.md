@@ -62,10 +62,10 @@ Không bao giờ dùng `service_role` / secret key ở đây.
 
 ### Lần đầu (admin)
 1. Đăng nhập bằng email admin.
-2. **Settings:** đặt tên sự kiện, sức chứa (mặc định 10), **thêm các ngày diễn ra sự kiện**, đổi tên phòng và chỉnh khung giờ nếu cần.
+2. **Settings:** đặt tên sự kiện, **thêm các ngày diễn ra sự kiện**, đổi tên phòng và chỉnh khung giờ nếu cần.
 3. **Staff:** thêm email 8 người trực và phân công phòng, "mọi ngày" hoặc từng ngày cụ thể. Phòng nào chưa có người trực sẽ hiện cảnh báo vàng.
 4. **Guest list → Import Excel/CSV**, dùng **file master** (khuyên dùng, đúng bố cục file nội bộ). Mẫu ẩn danh: `docs/template-master.xlsx`.
-   - Hàng tiêu đề `Room 6 (60) | Room 5 (40) | …`: số trong ngoặc là **sức chứa riêng** của phòng.
+   - Hàng tiêu đề `Room 6 (60) | Room 5 (40) | …` là tên phòng. Số trong ngoặc được bỏ qua, vì không giới hạn số chỗ.
    - Mỗi khối cột (A–G, I–O, Q–W…) là **1 ngày**. Cột bên trái mỗi khối là giờ.
    - Ô ở hàng giờ là **cuộc họp**, ví dụ `GMD 1 - VY` được hiểu là cuộc họp *GMD 1*, người chủ trì *VY*. Các dòng bên dưới là khách: `Tên - Quỹ` được tách thành tên và công ty, `Quỹ (1 attendee)` cũng đọc được.
    - Khung giờ không có trong Cài đặt (08:00, 08:55, 12:00) sẽ bị bỏ qua.
@@ -100,8 +100,8 @@ Sửa file master trên máy rồi tải lên lại: **Guest list → Import Exc
 Muốn sửa nhanh 1–2 người thì sửa trực tiếp trên web: **Sửa** (đổi phòng, giờ, thông tin), **+ Thêm khách**, **Xoá hẳn**, hoặc **Sửa cuộc họp**. Người trực thấy thay đổi ngay mà không cần tải lại trang.
 
 ### Trong ngày sự kiện
-- **Người trực** mở link trên điện thoại. App tự chọn khung giờ hiện tại; họ bấm **Check-in** khi khách đến, hoặc **+ Thêm khách** cho walk-in. Khi khung giờ đã đủ sức chứa, nút thêm bị khoá và database cũng từ chối, kể cả khi 2 người cùng bấm một lúc.
-- **Admin** xem lưới tổng quan 8×7 cập nhật realtime, bấm vào ô để xem danh sách. Bấm **Sửa** để chuyển khách sang phòng/khung giờ khác. Admin được phép vượt sức chứa (ô sẽ hiện màu đỏ).
+- **Người trực** mở link trên điện thoại. App tự chọn khung giờ hiện tại; họ bấm **Check in** khi khách đến, hoặc **+ Add guest** cho walk-in. Không giới hạn số chỗ.
+- **Admin** xem lưới tổng quan 8×7 cập nhật realtime, bấm vào ô để xem danh sách. Bấm **Sửa** để chuyển khách sang phòng/khung giờ khác. 
 - **Activity log:** ghi lại mọi lần thêm/sửa/xoá, ai làm, lúc nào, đổi từ gì sang gì.
 - **Export CSV:** xuất danh sách đang lọc, mở được bằng Excel và có trạng thái check-in.
 
@@ -111,7 +111,7 @@ Muốn sửa nhanh 1–2 người thì sửa trực tiếp trên web: **Sửa** 
 |---|---|---|
 | Xem khách | Tất cả | Chỉ phòng + ngày được phân công |
 | Check-in / đổi trạng thái / sửa thông tin | ✓ | ✓ (phòng mình) |
-| Thêm khách | ✓ (được vượt sức chứa) | ✓ (phòng mình, trong sức chứa) |
+| Thêm khách | ✓ | ✓ (phòng mình) |
 | Chuyển phòng / khung giờ / ngày | ✓ | ✗ |
 | Xoá hẳn khách | ✓ | ✗ (chỉ đổi sang "Đã huỷ") |
 | Nhân sự, cài đặt, nhật ký | ✓ | ✗ |

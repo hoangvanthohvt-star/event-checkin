@@ -169,8 +169,6 @@ set search_path = ''
 as $$
 declare
   v_admin    boolean := public.is_admin();
-  v_capacity int;
-  v_count    int;
   v_user     text := nullif(public.current_email(), '');
 begin
   -- Kiểm tra quyền trước (trigger chạy trước RLS WITH CHECK), tránh lộ thông tin phòng khác
@@ -207,29 +205,7 @@ begin
     new.checked_in_at := null;
   end if;
 
-  -- Kiểm tra sức chứa (admin được phép vượt; người trực thì bị chặn)
-  if new.status <> 'cancelled'
-     and (tg_op = 'INSERT'
-          or old.status = 'cancelled'
-          or new.room_id is distinct from old.room_id
-          or new.slot_id is distinct from old.slot_id
-          or new.event_date is distinct from old.event_date)
-     and not v_admin and auth.uid() is not null then
-    -- khoá theo ô để 2 người thêm cùng lúc không vượt sức chứa
-    perform pg_advisory_xact_lock(hashtext(new.event_date::text || ':' || new.room_id || ':' || new.slot_id));
-    select coalesce(r.capacity, s.capacity) into v_capacity
-      from public.settings s left join public.rooms r on r.id = new.room_id
-     where s.id;
-    select count(*) into v_count
-      from public.attendees a
-     where a.event_date = new.event_date and a.room_id = new.room_id
-       and a.slot_id = new.slot_id and a.status <> 'cancelled'
-       and a.id <> new.id;
-    if v_count >= v_capacity then
-      raise exception 'This time slot is full (% guests). Ask an admin to add more.', v_capacity
-        using errcode = 'P0001';
-    end if;
-  end if;
+  -- (Không giới hạn số chỗ: sức chứa phòng không được kiểm tra)
 
   return new;
 end;

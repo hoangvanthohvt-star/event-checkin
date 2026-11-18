@@ -110,9 +110,6 @@ const isAdmin = () => S.me?.role === 'admin';
 const roomName = (id) => S.rooms.find((r) => r.id === id)?.name ?? `Room ${id}`;
 const slotById = (id) => S.slots.find((s) => s.id === id);
 const slotLabel = (id) => slotById(id)?.label ?? `#${id}`;
-const capacity = () => S.settings?.capacity ?? 10;
-/** Sức chứa của 1 phòng: riêng từng phòng, nếu không có thì dùng mức chung. */
-const capOf = (roomId) => S.rooms.find((r) => r.id === roomId)?.capacity ?? capacity();
 const meetingOf = (roomId, slotId) => S.meetings.find((m) => m.room_id === roomId && m.slot_id === slotId);
 const meetingText = (m) => m ? (m.host ? `${m.title} · ${m.host}` : m.title) : '';
 const activeCount = (rows) => rows.filter((r) => r.status !== 'cancelled').length;
@@ -424,13 +421,12 @@ function StaffView() {
   }
 
   const roomRows = S.rows.filter((r) => r.room_id === S.staffRoom);
-  const cap = capOf(S.staffRoom);
   const tabs = h('nav', { class: 'slot-tabs', 'aria-label': 'Time slots' }, S.slots.map((s) => {
     const rs = roomRows.filter((r) => r.slot_id === s.id);
     const n = activeCount(rs);
     const inN = rs.filter((r) => r.status === 'checked_in').length;
     return h('button', {
-      class: `slot-tab ${s.id === S.staffSlot ? 'active' : ''} ${n >= cap ? 'full' : ''}`,
+      class: `slot-tab ${s.id === S.staffSlot ? 'active' : ''}`,
       'aria-pressed': String(s.id === S.staffSlot),
       onclick: () => { S.staffSlot = s.id; render(); },
     }, h('span', { class: 'slot-time' }, hhmm(s.start_time)),
@@ -455,13 +451,12 @@ function StaffView() {
     tabs,
     h('div', { class: 'stats' },
       Stat('Checked in', `${inN}/${n}`),
-      Stat('Capacity', `${n}/${cap}`, n > cap ? 'over' : n >= cap ? 'full' : ''),
+      Stat('Guests', n),
       Stat('Not arrived', slotRows.filter((r) => r.status === 'registered').length)),
     h('div', { class: 'toolbar' },
       h('input', { id: 'staff-q', type: 'search', placeholder: 'Search name, phone, company…', value: S.staffQ,
         oninput: (e) => { S.staffQ = e.target.value; render(); } }),
-      h('button', { class: 'btn primary', disabled: n >= cap,
-        title: n >= cap ? 'Full — contact an admin' : null,
+      h('button', { class: 'btn primary',
         onclick: () => editAttendee({ room_id: S.staffRoom, slot_id: S.staffSlot, event_date: S.date, is_walk_in: true }) },
         '+ Add guest')),
     shown.length ? list : h('div', { class: 'card empty' }, slotRows.length ? 'No matching guests.' : 'No guests in this time slot yet.')));
@@ -502,20 +497,19 @@ function Overview() {
   // Giống file Excel: giờ theo cột dọc (hàng), phòng theo hàng ngang (cột)
   const cellBtn = (room, s) => {
     const cell = S.rows.filter((r) => r.room_id === room.id && r.slot_id === s.id);
-    const cap = capOf(room.id);
     const n = activeCount(cell);
     const inN = cell.filter((r) => r.status === 'checked_in').length;
     const m = meetingOf(room.id, s.id);
-    const cls = n > cap ? 'over' : n === cap ? 'full' : (n === 0 && !m) ? 'zero' : '';
+    const cls = (n === 0 && !m) ? 'zero' : '';
     return h('td', null, h('button', { class: `cell ${cls}`,
       title: `${room.name} · ${s.label}${m ? ' · ' + meetingText(m) : ''}: ${n} guests, ${inN} checked in`,
       onclick: () => { Object.assign(S.filters, { room: String(room.id), slot: String(s.id), status: '', q: '' }); S.tab = 'list'; render(); } },
       m ? h('span', { class: 'cell-title' }, m.title) : null,
-      h('span', { class: 'cell-n' }, `${n}/${cap}`), h('span', { class: 'cell-in' }, `✓ ${inN}`)));
+      h('span', { class: 'cell-n' }, `${n}`), h('span', { class: 'cell-in' }, `✓ ${inN}`)));
   };
   const table = h('table', { class: 'grid' },
     h('thead', null, h('tr', null, h('th', null, 'Time'),
-      S.rooms.map((room) => h('th', null, room.name, h('div', { class: 'muted small' }, `${capOf(room.id)} seats`))))),
+      S.rooms.map((room) => h('th', null, room.name)))),
     h('tbody', null,
       S.slots.map((s) => h('tr', null,
         h('th', { scope: 'row' }, hhmm(s.start_time)),
@@ -529,8 +523,7 @@ function Overview() {
       Stat('Checked in', `${totalIn} (${live.length ? Math.round(totalIn * 100 / live.length) : 0}%)`),
       Stat('Walk-in', walkIns),
       Stat('Cancelled', S.rows.filter((r) => r.status === 'cancelled').length),
-      Stat('Meetings', S.meetings.length),
-      Stat('Day capacity', `${live.length}/${S.rooms.reduce((t, r) => t + capOf(r.id), 0) * S.slots.length}`)),
+      Stat('Meetings', S.meetings.length)),
     h('div', { class: 'card' },
       h('div', { class: 'card-head' }, h('h2', null, `Schedule ${fmtDate(S.date)}`),
         h('span', { class: 'muted small' }, 'Click a cell to view or edit its guests')),
@@ -574,7 +567,7 @@ function AdminList() {
     F.room && F.slot ? h('div', { class: 'room-head' },
       h('h2', null, `${roomName(Number(F.room))} · ${slotLabel(Number(F.slot))}`),
       meetingOf(Number(F.room), Number(F.slot)) ? h('span', { class: 'meeting-tag' }, meetingText(meetingOf(Number(F.room), Number(F.slot)))) : null,
-      h('span', { class: 'muted' }, `${activeCount(rows)}/${capOf(Number(F.room))} guests`),
+      h('span', { class: 'muted' }, `${activeCount(rows)} guests`),
       h('button', { class: 'btn small ghost', onclick: () => editMeeting(Number(F.room), Number(F.slot)) },
         meetingOf(Number(F.room), Number(F.slot)) ? 'Edit meeting' : '+ Name this meeting')) : null,
     h('p', { class: 'muted small' }, `${rows.length} results`),
@@ -713,13 +706,12 @@ function SettingsView() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const { error } = await sb.from('settings').update({
-      event_name: fd.get('event_name').trim() || 'Event', capacity: Number(fd.get('capacity')),
+      event_name: fd.get('event_name').trim() || 'Event',
     }).eq('id', true);
     if (error) return toast(errMsg(error), 'error');
     await reloadConfig('Settings saved');
   } },
     h('label', { class: 'field' }, 'Event name', h('input', { name: 'event_name', value: st.event_name })),
-    h('label', { class: 'field' }, 'Default capacity per time slot', h('input', { name: 'capacity', type: 'number', min: 1, max: 500, value: st.capacity })),
     h('div', { class: 'field wide' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save')));
 
   const saveDates = async (arr) => {
@@ -739,8 +731,7 @@ function SettingsView() {
   const rooms = h('form', { class: 'grid-form', onsubmit: async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const upd = S.rooms.map((r) => ({ id: r.id, name: fd.get(`room-${r.id}`).trim() || r.name, sort_order: r.sort_order,
-      capacity: Number(fd.get(`cap-${r.id}`)) || null }));
+    const upd = S.rooms.map((r) => ({ id: r.id, name: fd.get(`room-${r.id}`).trim() || r.name, sort_order: r.sort_order }));
     const { error } = await sb.from('rooms').upsert(upd);
     if (error) return toast(errMsg(error), 'error');
     await reloadConfig('Rooms saved');
@@ -748,8 +739,6 @@ function SettingsView() {
     S.rooms.map((r) => h('div', { class: 'field room-edit' }, `Room #${r.id}`,
       h('div', { class: 'toolbar' },
         h('input', { name: `room-${r.id}`, value: r.name, 'aria-label': 'Room name' }),
-        h('input', { name: `cap-${r.id}`, type: 'number', min: 1, max: 1000, value: r.capacity ?? '', placeholder: String(capacity()),
-          'aria-label': 'Capacity', class: 'cap-input', title: 'Capacity (empty = default)' }),
         h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Delete ${r.name}`, title: 'Delete room', onclick: async () => {
           if (!(await confirmBox(`Delete ${r.name}? Only possible while the room has no guests.`, 'Delete', true))) return;
           const { error } = await sb.from('rooms').delete().eq('id', r.id);
@@ -777,8 +766,7 @@ function SettingsView() {
   return [
     h('div', { class: 'card stack' }, h('h2', null, 'General'), general),
     h('div', { class: 'card stack' }, h('h2', null, 'Event dates'), dates),
-    h('div', { class: 'card stack' }, h('h2', null, 'Rooms & capacity'),
-      h('p', { class: 'muted small' }, 'The number is the room capacity; leave it empty to use the default above.'), rooms),
+    h('div', { class: 'card stack' }, h('h2', null, 'Rooms'), rooms),
     h('div', { class: 'card stack' }, h('h2', null, 'Time slots'), slots),
   ];
 }
@@ -1081,7 +1069,7 @@ function parseMasterGrid(sheetName, rows) {
         emails: emails.get(rc.room_id) || [], staffName: '', date: null, count: counts.get(rc.room_id) || 0 });
     }
     b.cols.forEach((rc, i) => {
-      if (!out.roomDefs.some((d) => d.id === rc.room_id)) out.roomDefs.push({ id: rc.room_id, name: rc.name, capacity: rc.capacity, sort_order: i + 1 });
+      if (!out.roomDefs.some((d) => d.id === rc.room_id)) out.roomDefs.push({ id: rc.room_id, name: rc.name, sort_order: i + 1 });
     });
   }
   return out;
@@ -1301,7 +1289,7 @@ function importFile() {
         h('td', { class: 'num' }, b.meetings), h('td', { class: 'num' }, b.guests)))))) : null;
 
     const roomDefsTable = parsed.roomDefs.length ? h('p', { class: 'small' }, h('strong', null, 'Rooms: '),
-      parsed.roomDefs.map((d) => `${d.name}${d.capacity ? ` (${d.capacity} seats)` : ''}`).join(', ')) : null;
+      parsed.roomDefs.map((d) => d.name).join(', ')) : null;
     const extra = parsed.roomDefs.length ? S.rooms.filter((r) => !parsed.roomDefs.some((d) => d.id === r.id)) : [];
     removeBox = extra.length ? h('input', { type: 'checkbox', checked: true }) : null;
 
