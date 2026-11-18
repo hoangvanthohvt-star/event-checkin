@@ -16,6 +16,8 @@ create table if not exists public.rooms (
   name       text not null,
   sort_order smallint not null default 0
 );
+-- Sức chứa riêng từng phòng (NULL = dùng sức chứa chung trong settings)
+alter table public.rooms add column if not exists capacity smallint check (capacity > 0);
 
 -- Khung giờ trong ngày
 create table if not exists public.time_slots (
@@ -77,6 +79,17 @@ create table if not exists public.attendees (
   updated_by    text
 );
 create index if not exists attendees_lookup_idx on public.attendees (event_date, room_id, slot_id);
+
+-- Cuộc họp trong từng ô (ngày × phòng × khung giờ), vd. "GMD 1" do "VY" chủ trì
+create table if not exists public.meetings (
+  id         bigint generated always as identity primary key,
+  event_date date not null,
+  room_id    smallint not null references public.rooms(id) on delete cascade,
+  slot_id    smallint not null references public.time_slots(id) on delete cascade,
+  title      text not null,
+  host       text,
+  unique (event_date, room_id, slot_id)
+);
 
 -- Nhật ký thay đổi (chỉ admin xem)
 create table if not exists public.attendee_log (
@@ -204,7 +217,9 @@ begin
      and not v_admin and auth.uid() is not null then
     -- khoá theo ô để 2 người thêm cùng lúc không vượt sức chứa
     perform pg_advisory_xact_lock(hashtext(new.event_date::text || ':' || new.room_id || ':' || new.slot_id));
-    select capacity into v_capacity from public.settings where id;
+    select coalesce(r.capacity, s.capacity) into v_capacity
+      from public.settings s left join public.rooms r on r.id = new.room_id
+     where s.id;
     select count(*) into v_count
       from public.attendees a
      where a.event_date = new.event_date and a.room_id = new.room_id
@@ -257,6 +272,7 @@ alter table public.staff            enable row level security;
 alter table public.room_assignments enable row level security;
 alter table public.attendees        enable row level security;
 alter table public.attendee_log     enable row level security;
+alter table public.meetings         enable row level security;
 
 -- Dọn policy cũ (để chạy lại file không lỗi)
 do $$
@@ -264,7 +280,7 @@ declare r record;
 begin
   for r in select policyname, tablename from pg_policies
            where schemaname = 'public'
-             and tablename in ('rooms','time_slots','settings','staff','room_assignments','attendees','attendee_log')
+             and tablename in ('rooms','time_slots','settings','staff','room_assignments','attendees','attendee_log','meetings')
   loop
     execute format('drop policy %I on public.%I', r.policyname, r.tablename);
   end loop;
@@ -302,6 +318,12 @@ create policy attendees_delete on public.attendees for delete to authenticated
   using ((select public.is_admin()));
 
 -- attendee_log: chỉ admin đọc; ghi qua trigger
+-- meetings: người trực thấy cuộc họp của phòng mình; chỉ admin sửa
+create policy meetings_select on public.meetings for select to authenticated
+  using (public.can_access_room(room_id, event_date));
+create policy meetings_admin on public.meetings for all to authenticated
+  using ((select public.is_admin())) with check ((select public.is_admin()));
+
 create policy log_admin_read on public.attendee_log for select to authenticated
   using ((select public.is_admin()));
 
@@ -309,7 +331,7 @@ create policy log_admin_read on public.attendee_log for select to authenticated
 grant usage on schema public to authenticated;
 grant select, insert, update, delete on
   public.rooms, public.time_slots, public.settings, public.staff,
-  public.room_assignments, public.attendees to authenticated;
+  public.room_assignments, public.attendees, public.meetings to authenticated;
 grant select on public.attendee_log to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
 
@@ -356,6 +378,11 @@ begin
      and not exists (select 1 from pg_publication_tables
                      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'attendees') then
     alter publication supabase_realtime add table public.attendees;
+  end if;
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables
+                     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'meetings') then
+    alter publication supabase_realtime add table public.meetings;
   end if;
 end $$;
 

@@ -62,7 +62,18 @@ Không bao giờ dùng `service_role` / secret key ở đây.
 1. Đăng nhập bằng email admin.
 2. **Cài đặt:** đặt tên sự kiện, sức chứa (mặc định 10), **thêm các ngày diễn ra sự kiện**, đổi tên phòng và chỉnh khung giờ nếu cần.
 3. **Nhân sự:** thêm email 8 người trực và phân công phòng, "mọi ngày" hoặc từng ngày cụ thể. Phòng nào chưa có người trực sẽ hiện cảnh báo vàng.
-4. **Danh sách khách → Nhập Excel/CSV:** tải **file mẫu** `mau-danh-sach.xlsx` (hoặc `du-lieu-mau.xlsx` có sẵn dữ liệu giả để chạy thử).
+4. **Danh sách khách → Nhập Excel/CSV**, dùng **file master** (khuyên dùng, đúng bố cục file nội bộ). Mẫu ẩn danh: `docs/mau-master.xlsx`.
+   - Hàng tiêu đề `Room 6 (60) | Room 5 (40) | …`: số trong ngoặc là **sức chứa riêng** của phòng.
+   - Mỗi khối cột (A–G, I–O, Q–W…) là **1 ngày**. Cột bên trái mỗi khối là giờ.
+   - Ô ở hàng giờ là **cuộc họp**, ví dụ `GMD 1 - VY` được hiểu là cuộc họp *GMD 1*, người chủ trì *VY*. Các dòng bên dưới là khách: `Tên - Quỹ` được tách thành tên và công ty, `Quỹ (1 attendee)` cũng đọc được.
+   - Khung giờ không có trong Cài đặt (08:00, 08:55, 12:00) sẽ bị bỏ qua.
+   - **Ngày:** ghi ở hàng 1 phía trên mỗi khối (vd. `Ngày 1 - 20/11/2026`), hoặc chọn trong màn hình xem trước khi nhập.
+   - **Người được vào phòng (tuỳ chọn):** thêm một hàng trước khung giờ đầu tiên, ô cột giờ ghi `Trực phòng (email)`, rồi điền email dưới từng phòng. Người đó sẽ được tạo tài khoản và chỉ thấy phòng của mình trong ngày đó.
+   - Phòng không có trong file có thể xoá tự động (chỉ khi chưa có khách).
+   - Nhập lại file đã sửa: khách mới được thêm, khách cũ được giữ nguyên, cuộc họp được cập nhật theo file. Trùng nghĩa là cùng ngày, phòng, khung giờ, tên **và** công ty.
+   - Tạo lại mẫu: `python3 tools/make_master_sample.py`.
+
+   Hoặc dùng **file mỗi phòng 1 sheet:** tải **file mẫu** `mau-danh-sach.xlsx` (hoặc `du-lieu-mau.xlsx` có sẵn dữ liệu giả để chạy thử).
    - Mỗi phòng một sheet `P1`…`P8`. Ở đầu sheet, điền các ô nền vàng:
      - **Tên phòng**
      - **Người trực (email)**: người được quyền xem phòng đó. Nhiều người thì cách nhau dấu phẩy.
