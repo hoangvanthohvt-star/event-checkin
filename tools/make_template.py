@@ -1,7 +1,7 @@
-"""Tạo file Excel mẫu: mỗi phòng 1 sheet (tên phòng, người trực, ngày, khung giờ, danh sách khách).
+"""Excel template: one sheet per room (room name, staff email, date, time slots, guest list).
 
-Chạy:  python3 tools/make_template.py            -> mau-danh-sach.xlsx (trống)
-       python3 tools/make_template.py --sample   -> du-lieu-mau.xlsx  (có dữ liệu giả để chạy thử)
+Run:  python3 tools/make_template.py            -> docs/template-per-room.xlsx (empty)
+      python3 tools/make_template.py --sample   -> docs/sample-data.xlsx       (fake data to try)
 """
 import random
 import sys
@@ -25,12 +25,12 @@ BOX = Border(left=thin, right=thin, top=thin, bottom=thin)
 def room_sheet(wb, n, sample, rnd):
     ws = wb.create_sheet(f"P{n}")
     labels = [
-        ("Tên phòng", f"Phòng {n}", "Tên hiển thị của phòng trên trang web."),
-        ("Người trực (email)", "", "Email người trực phòng này. Họ đăng nhập bằng email này và CHỈ thấy khách của phòng này. Nhiều người: cách nhau bằng dấu phẩy."),
-        ("Tên người trực", "", "Không bắt buộc."),
-        ("Ngày (dd/mm/yyyy)", "", "Để trống = ngày đang chọn trên trang khi nhập. Nếu sự kiện nhiều ngày: copy sheet này cho từng ngày."),
+        ("Room name", f"Room {n}", "Room name shown on the website."),
+        ("Staff email", "", "Email of the person on duty in this room. They sign in with it and see ONLY this room. Several people: separate with commas."),
+        ("Staff name", "", "Optional."),
+        ("Date (dd/mm/yyyy)", "", "Empty = the date selected on the website when importing. Multi-day event: copy this sheet for each day."),
     ]
-    ws["A1"] = f"PHÒNG {n}"
+    ws["A1"] = f"ROOM {n}"
     ws["A1"].font = Font(name=F, size=14, bold=True, color="1F4E79")
     for i, (label, value, note) in enumerate(labels, start=2):
         a, b = ws.cell(row=i, column=1, value=label), ws.cell(row=i, column=2, value=value)
@@ -44,7 +44,7 @@ def room_sheet(wb, n, sample, rnd):
         ws["B3"] = f"truc.p{n}@vidu.com"
         ws["B4"] = ["Lan", "Minh", "Hùng", "Hà", "Tuấn", "Mai", "Long", "Thảo"][n - 1]
 
-    heads = ["Khung giờ", "Họ tên", "SĐT", "Email", "Công ty", "Ghi chú"]
+    heads = ["Time slot", "Full name", "Phone", "Email", "Company", "Note"]
     for c, t in enumerate(heads, start=1):
         cell = ws.cell(row=HEADER_ROW, column=c, value=t)
         cell.font = Font(name=F, bold=True, color="FFFFFF")
@@ -72,7 +72,7 @@ def room_sheet(wb, n, sample, rnd):
                 ws.cell(row=r, column=3, value="09" + "".join(rnd.choice("0123456789") for _ in range(8)))
                 ws.cell(row=r, column=5, value=rnd.choice(["AGCO", "Vietcap", "Công ty Alpha", "Công ty Beta", "Gamma Corp"]))
                 if rnd.random() < 0.08:
-                    ws.cell(row=r, column=6, value="Khách VIP")
+                    ws.cell(row=r, column=6, value="VIP")
             r += 1
 
     for col, w in zip("ABCDEF", [20, 28, 15, 26, 22, 24]):
@@ -83,39 +83,39 @@ def room_sheet(wb, n, sample, rnd):
 
 def guide_sheet(wb):
     ws = wb.active
-    ws.title = "Hướng dẫn"
+    ws.title = "Instructions"
     rows = [
-        ("HƯỚNG DẪN ĐIỀN DANH SÁCH", None),
+        ("HOW TO FILL IN THIS WORKBOOK", None),
         ("", None),
-        ("1. Mỗi sheet P1…P8 là một phòng họp.", None),
-        ("2. Chỉ điền vào các ô NỀN VÀNG ở đầu sheet:", None),
-        ("     • Tên phòng — tên hiển thị trên trang web", None),
-        ("     • Người trực (email) — email người được quyền xem phòng này (nhiều người: cách nhau dấu phẩy)", None),
-        ("     • Tên người trực — không bắt buộc", None),
-        ("     • Ngày — để trống thì lấy ngày đang chọn trên trang lúc nhập", None),
-        ("3. Danh sách khách: điền Họ tên (bắt buộc), SĐT, Email, Công ty, Ghi chú vào đúng khung giờ.", None),
-        ("   Cột Khung giờ đã điền sẵn 10 dòng mỗi khung — dòng nào để trống Họ tên sẽ được bỏ qua.", None),
-        ("4. Sự kiện nhiều ngày: copy sheet phòng (chuột phải → Move or Copy) và đổi ô Ngày.", None),
-        ("5. Trên trang web: Admin → Danh sách khách → Nhập Excel/CSV → chọn file → xem trước → Nhập.", None),
-        ("   Nhập lại cùng file không tạo trùng khách (trùng = cùng ngày, phòng, khung giờ, họ tên).", None),
+        ("1. Each sheet P1…P8 is one meeting room.", None),
+        ("2. Fill in only the YELLOW cells at the top of each sheet:", None),
+        ("     • Room name — shown on the website", None),
+        ("     • Staff email — who may see this room (several: separate with commas)", None),
+        ("     • Staff name — optional", None),
+        ("     • Date — empty = the date selected on the website when importing", None),
+        ("3. Guest list: fill in Full name (required), Phone, Email, Company, Note under the right time slot.", None),
+        ("   The Time slot column has 10 rows per slot — rows without a name are ignored.", None),
+        ("4. Multi-day event: copy a room sheet (right-click → Move or Copy) and change the Date cell.", None),
+        ("5. On the website: Admin → Guest list → Import Excel/CSV → choose file → preview → Import.", None),
+        ("   Importing the same file again does not create duplicates.", None),
         ("", None),
-        ("VÍ DỤ ĐIỀN (chỉ để tham khảo — sheet này không được nhập):", None),
+        ("EXAMPLE (for reference only — this sheet is not imported):", None),
     ]
     for i, (t, _) in enumerate(rows, start=1):
         ws.cell(row=i, column=1, value=t).font = Font(name=F, bold=(i in (1, 15)), size=14 if i == 1 else 10,
                                                     color="1F4E79" if i == 1 else "000000")
-    ex = [("Tên phòng", "Phòng VIP 1"), ("Người trực (email)", "lan.nguyen@congty.com"), ("Tên người trực", "Nguyễn Thị Lan"),
-          ("Ngày (dd/mm/yyyy)", "20/11/2026")]
+    ex = [("Room name", "VIP Room 1"), ("Staff email", "lan.nguyen@company.com"), ("Staff name", "Lan Nguyen"),
+          ("Date (dd/mm/yyyy)", "20/11/2026")]
     for j, (a, b) in enumerate(ex, start=16):
         ws.cell(row=j, column=1, value=a).font = Font(name=F, bold=True)
         c = ws.cell(row=j, column=2, value=b)
         c.font = Font(name=F, color="0000FF")
         c.fill = YELLOW
-    for c, t in enumerate(["Khung giờ", "Họ tên", "SĐT", "Email", "Công ty", "Ghi chú"], start=1):
+    for c, t in enumerate(["Time slot", "Full name", "Phone", "Email", "Company", "Note"], start=1):
         cell = ws.cell(row=21, column=c, value=t)
         cell.font = Font(name=F, bold=True, color="FFFFFF")
         cell.fill = HEAD
-    for c, v in enumerate(["09:00", "Trần Văn Bình", "0901234567", "binh.tran@agco.com", "AGCO", "Khách VIP"], start=1):
+    for c, v in enumerate(["09:00", "Binh Tran", "0901234567", "binh.tran@example.com", "Example Fund", "VIP"], start=1):
         ws.cell(row=22, column=c, value=v).font = Font(name=F)
         ws.cell(row=22, column=c).number_format = "@"
     ws.column_dimensions["A"].width = 22
@@ -131,7 +131,7 @@ def main():
     guide_sheet(wb)
     for n in range(1, ROOMS + 1):
         room_sheet(wb, n, sample, rnd)
-    out = "du-lieu-mau.xlsx" if sample else "mau-danh-sach.xlsx"
+    out = "docs/sample-data.xlsx" if sample else "docs/template-per-room.xlsx"
     wb.save(out)
     print(out)
 

@@ -34,7 +34,7 @@ function openModal(title, body, actions = []) {
     h('form', { method: 'dialog', class: 'modal-inner', onsubmit: (e) => e.preventDefault() },
       h('div', { class: 'modal-head' },
         h('h2', null, title),
-        h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Đóng', onclick: () => close() }, '✕')),
+        h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Close', onclick: () => close() }, '✕')),
       h('div', { class: 'modal-body' }, body),
       actions.length ? h('div', { class: 'modal-actions' }, actions) : null));
   const close = () => { dlg.close(); dlg.remove(); };
@@ -44,12 +44,12 @@ function openModal(title, body, actions = []) {
   return close;
 }
 
-function confirmBox(message, okLabel = 'Đồng ý', danger = false) {
+function confirmBox(message, okLabel = 'OK', danger = false) {
   return new Promise((resolve) => {
     let done = false;
     const finish = (v) => { if (!done) { done = true; resolve(v); close(); } };
-    const close = openModal('Xác nhận', h('p', null, message), [
-      h('button', { type: 'button', class: 'btn', onclick: () => finish(false) }, 'Huỷ'),
+    const close = openModal('Confirm', h('p', null, message), [
+      h('button', { type: 'button', class: 'btn', onclick: () => finish(false) }, 'Cancel'),
       h('button', { type: 'button', class: `btn ${danger ? 'danger' : 'primary'}`, onclick: () => finish(true) }, okLabel),
     ]);
   });
@@ -57,22 +57,22 @@ function confirmBox(message, okLabel = 'Đồng ý', danger = false) {
 
 const todayStr = () => new Date().toLocaleDateString('sv'); // YYYY-MM-DD theo giờ máy
 const fmtDate = (d) => { const [y, m, dd] = d.split('-'); return `${dd}/${m}/${y}`; };
-const fmtTime = (ts) => ts ? new Date(ts).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
-const fmtDateTime = (ts) => new Date(ts).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+const fmtTime = (ts) => ts ? new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+const fmtDateTime = (ts) => new Date(ts).toLocaleString('en-GB', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
 const norm = (s) => (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 const hhmm = (t) => (t || '').slice(0, 5);
 
 const STATUS = {
-  registered: { label: 'Đã đăng ký', cls: 'st-reg' },
-  checked_in: { label: 'Đã check-in', cls: 'st-in' },
-  no_show:    { label: 'Vắng', cls: 'st-no' },
-  cancelled:  { label: 'Đã huỷ', cls: 'st-cx' },
+  registered: { label: 'Registered', cls: 'st-reg' },
+  checked_in: { label: 'Checked in', cls: 'st-in' },
+  no_show:    { label: 'No-show', cls: 'st-no' },
+  cancelled:  { label: 'Cancelled', cls: 'st-cx' },
 };
 const statusBadge = (s) => h('span', { class: `badge ${STATUS[s].cls}` }, STATUS[s].label);
 
 function errMsg(error) {
-  if (!error) return 'Lỗi không xác định';
-  if (error.code === '42501' && !/[À-ỹ]/.test(error.message)) return 'Bạn không có quyền thực hiện thao tác này';
+  if (!error) return 'Unknown error';
+  if (error.code === '42501' && /row-level security|permission denied/i.test(error.message)) return 'You do not have permission to do this';
   return error.message || String(error);
 }
 
@@ -90,8 +90,8 @@ const S = {
 
 if (SUPABASE_URL.includes('YOUR-PROJECT') || SUPABASE_ANON_KEY.includes('YOUR-')) {
   $app.replaceChildren(h('div', { class: 'center card narrow' },
-    h('h1', null, 'Chưa cấu hình'),
-    h('p', null, 'Mở file ', h('code', null, 'config.js'), ' và điền SUPABASE_URL cùng anon/publishable key của dự án.')));
+    h('h1', null, 'Not configured'),
+    h('p', null, 'Open ', h('code', null, 'config.js'), ' and fill in SUPABASE_URL and the project anon/publishable key.')));
   throw new Error('Missing config');
 }
 
@@ -103,11 +103,11 @@ const LOGIN_ERROR = (() => {
   if (!p.get('error')) return null;
   history.replaceState(null, '', location.pathname + location.search);
   return p.get('error_code') === 'otp_expired'
-    ? 'Link đăng nhập đã hết hạn hoặc đã được dùng. Hãy gửi link mới.'
-    : (p.get('error_description') || 'Đăng nhập không thành công.').replace(/\+/g, ' ');
+    ? 'This sign-in link has expired or was already used. Please request a new one.'
+    : (p.get('error_description') || 'Sign-in failed.').replace(/\+/g, ' ');
 })();
 const isAdmin = () => S.me?.role === 'admin';
-const roomName = (id) => S.rooms.find((r) => r.id === id)?.name ?? `Phòng ${id}`;
+const roomName = (id) => S.rooms.find((r) => r.id === id)?.name ?? `Room ${id}`;
 const slotById = (id) => S.slots.find((s) => s.id === id);
 const slotLabel = (id) => slotById(id)?.label ?? `#${id}`;
 const capacity = () => S.settings?.capacity ?? 10;
@@ -136,7 +136,7 @@ function teardown() {
 
 async function boot() {
   booted = true;
-  $app.replaceChildren(h('div', { class: 'center muted' }, 'Đang tải dữ liệu…'));
+  $app.replaceChildren(h('div', { class: 'center muted' }, 'Loading…'));
   const { data: me, error } = await sb.rpc('get_me');
   if (error) { booted = false; return renderFatal(errMsg(error)); }
   if (!me) return renderNoAccess();
@@ -206,9 +206,9 @@ function renderLogin() {
   let email = '';
   const msg = h('p', { class: 'muted small' });
   const codeBox = h('div', { class: 'stack', hidden: true },
-    h('label', { for: 'otp' }, 'Hoặc nhập mã 6 số trong email'),
+    h('label', { for: 'otp' }, 'Or enter the 6-digit code from the email'),
     h('input', { id: 'otp', inputmode: 'numeric', autocomplete: 'one-time-code', maxlength: 10, placeholder: '123456' }),
-    h('button', { type: 'button', class: 'btn primary', onclick: verifyCode }, 'Xác nhận mã'));
+    h('button', { type: 'button', class: 'btn primary', onclick: verifyCode }, 'Verify code'));
 
   async function send(e) {
     e.preventDefault();
@@ -221,7 +221,7 @@ function renderLogin() {
     });
     btn.disabled = false;
     if (error) return toast(errMsg(error), 'error');
-    msg.textContent = `Đã gửi link đăng nhập tới ${email}. Mở email trên thiết bị này để đăng nhập.`;
+    msg.textContent = `We sent a sign-in link to ${email}. Open it on this device to sign in.`;
     codeBox.hidden = false;
   }
 
@@ -234,28 +234,28 @@ function renderLogin() {
 
   $app.replaceChildren(h('div', { class: 'center' },
     h('div', { class: 'card narrow stack' },
-      h('h1', null, 'Đăng nhập'),
-      h('p', { class: 'muted' }, 'Dùng email đã được admin cấp quyền.'),
+      h('h1', null, 'Sign in'),
+      h('p', { class: 'muted' }, 'Use the email address your admin has granted access to.'),
       LOGIN_ERROR ? h('p', { class: 'error small' }, LOGIN_ERROR) : null,
       h('form', { class: 'stack', onsubmit: send },
         h('label', { for: 'email' }, 'Email'),
         h('input', { id: 'email', name: 'email', type: 'email', required: true, autocomplete: 'email', placeholder: 'ten@congty.com' }),
-        h('button', { class: 'btn primary', type: 'submit' }, 'Gửi link đăng nhập')),
+        h('button', { class: 'btn primary', type: 'submit' }, 'Send sign-in link')),
       msg, codeBox)));
 }
 
 function renderNoAccess() {
   $app.replaceChildren(h('div', { class: 'center' }, h('div', { class: 'card narrow stack' },
-    h('h1', null, 'Chưa được cấp quyền'),
-    h('p', null, 'Tài khoản này chưa có trong danh sách nhân sự. Hãy liên hệ admin để được phân công phòng.'),
-    h('button', { class: 'btn', onclick: () => sb.auth.signOut() }, 'Đăng xuất'))));
+    h('h1', null, 'No access yet'),
+    h('p', null, 'This account is not on the staff list. Please ask an admin to assign you a room.'),
+    h('button', { class: 'btn', onclick: () => sb.auth.signOut() }, 'Sign out'))));
 }
 
 function renderFatal(message) {
   $app.replaceChildren(h('div', { class: 'center' }, h('div', { class: 'card narrow stack' },
-    h('h1', null, 'Có lỗi xảy ra'), h('p', null, message),
-    h('button', { class: 'btn', onclick: () => location.reload() }, 'Tải lại'),
-    h('button', { class: 'btn', onclick: () => sb.auth.signOut() }, 'Đăng xuất'))));
+    h('h1', null, 'Something went wrong'), h('p', null, message),
+    h('button', { class: 'btn', onclick: () => location.reload() }, 'Reload'),
+    h('button', { class: 'btn', onclick: () => sb.auth.signOut() }, 'Sign out'))));
 }
 
 // ===================================================================
@@ -265,11 +265,11 @@ function TopBar(extra) {
   return h('header', { class: 'topbar' },
     h('div', { class: 'brand' },
       h('strong', null, S.settings.event_name),
-      h('span', { class: 'muted small' }, isAdmin() ? 'Admin' : 'Trực phòng')),
+      h('span', { class: 'muted small' }, isAdmin() ? 'Admin' : 'Room staff')),
     extra,
     h('div', { class: 'who' },
       h('span', { class: 'muted small ellipsis' }, S.me.full_name || S.me.email),
-      h('button', { class: 'btn ghost small', onclick: () => sb.auth.signOut() }, 'Đăng xuất')));
+      h('button', { class: 'btn ghost small', onclick: () => sb.auth.signOut() }, 'Sign out')));
 }
 
 function DatePicker() {
@@ -277,42 +277,42 @@ function DatePicker() {
   const onchange = async (e) => { S.date = e.target.value; S.staffSlot = null; await refresh(); };
   if (dates.length) {
     if (!dates.includes(S.date)) dates.push(S.date);
-    return h('select', { id: 'date-pick', 'aria-label': 'Ngày', onchange, value: S.date },
-      dates.sort().map((d) => h('option', { value: d }, `Ngày ${fmtDate(d)}`)));
+    return h('select', { id: 'date-pick', 'aria-label': 'Date', onchange, value: S.date },
+      dates.sort().map((d) => h('option', { value: d }, fmtDate(d))));
   }
-  return h('input', { id: 'date-pick', type: 'date', 'aria-label': 'Ngày', value: S.date, onchange });
+  return h('input', { id: 'date-pick', type: 'date', 'aria-label': 'Date', value: S.date, onchange });
 }
 
 async function updateAttendee(id, patch) {
   const { data, error } = await sb.from('attendees').update(patch).eq('id', id).select('id');
   if (error) { toast(errMsg(error), 'error'); return false; }
-  if (!data?.length) { toast('Không có quyền sửa khách này', 'error'); return false; }
+  if (!data?.length) { toast('You cannot edit this guest', 'error'); return false; }
   await refresh();
   return true;
 }
 
+/** Mỗi khách gói gọn 1 dòng: tên · công ty · trạng thái · nút. Chi tiết (SĐT, email, ghi chú) xem khi rê chuột hoặc bấm ✎. */
 function AttendeeRow(r, { showPlace = false } = {}) {
   const checked = r.status === 'checked_in';
-  const sub = [r.company, r.phone, r.email].filter(Boolean).join(' · ');
-  return h('li', { class: `att ${r.status}` },
-    h('div', { class: 'att-main' },
-      h('div', { class: 'att-name' },
-        r.full_name,
-        r.is_walk_in ? h('span', { class: 'chip' }, 'Walk-in') : null),
-      sub ? h('div', { class: 'muted small' }, sub) : null,
-      r.note ? h('div', { class: 'small note' }, r.note) : null,
-      h('div', { class: 'att-meta' },
-        showPlace ? h('span', { class: 'chip' }, `${roomName(r.room_id)} · ${hhmm(slotById(r.slot_id)?.start_time)}`) : null,
-        statusBadge(r.status),
-        checked ? h('span', { class: 'muted small' }, `lúc ${fmtTime(r.checked_in_at)}`) : null)),
-    h('div', { class: 'att-actions' },
-      r.status === 'cancelled'
-        ? h('button', { class: 'btn small', onclick: () => updateAttendee(r.id, { status: 'registered' }) }, 'Khôi phục')
-        : h('button', {
-            class: `btn small ${checked ? '' : 'primary'}`,
-            onclick: () => updateAttendee(r.id, { status: checked ? 'registered' : 'checked_in' }),
-          }, checked ? 'Bỏ check-in' : 'Check-in'),
-      h('button', { class: 'btn small ghost', 'aria-label': `Sửa ${r.full_name}`, onclick: () => editAttendee(r) }, 'Sửa')));
+  const details = [r.full_name, r.company, r.phone, r.email, r.note && `Note: ${r.note}`,
+    r.is_walk_in && 'Walk-in', checked && `Checked in at ${fmtTime(r.checked_in_at)}`].filter(Boolean).join('\n');
+  return h('li', { class: `att ${r.status}`, title: details },
+    showPlace ? h('span', { class: 'att-place' }, `${roomName(r.room_id).replace(/^Room\s*/i, 'R')} ${hhmm(slotById(r.slot_id)?.start_time)}`) : null,
+    h('span', { class: 'att-line' },
+      h('span', { class: 'att-name' }, r.full_name),
+      r.company ? h('span', { class: 'att-co' }, r.company) : null),
+    r.note ? h('span', { class: 'att-flag', 'aria-label': `Note: ${r.note}` }, '✱') : null,
+    r.is_walk_in ? h('span', { class: 'att-flag walk', 'aria-label': 'Walk-in' }, 'W') : null,
+    checked ? h('span', { class: 'att-time' }, fmtTime(r.checked_in_at))
+      : r.status === 'registered' ? null : statusBadge(r.status),
+    r.status === 'cancelled'
+      ? h('button', { class: 'btn xs', onclick: () => updateAttendee(r.id, { status: 'registered' }) }, 'Restore')
+      : h('button', {
+          class: `btn xs ${checked ? '' : 'primary'}`,
+          'aria-label': checked ? `Undo check-in for ${r.full_name}` : `Check in ${r.full_name}`,
+          onclick: () => updateAttendee(r.id, { status: checked ? 'registered' : 'checked_in' }),
+        }, checked ? 'Undo' : 'Check in'),
+    h('button', { class: 'icon-btn xs', 'aria-label': `Edit ${r.full_name}`, title: 'Edit', onclick: (e) => { e.stopPropagation(); editAttendee(r); } }, '✎'));
 }
 
 function editAttendee(r) {
@@ -323,32 +323,32 @@ function editAttendee(r) {
 
   const allowedRooms = admin ? S.rooms : S.rooms.filter((x) => staffRoomIds().includes(x.id));
   const form = h('div', { class: 'grid-form' },
-    f('full_name', 'Họ tên *', { required: true, autocomplete: 'off' }),
-    f('phone', 'Số điện thoại', { type: 'tel', autocomplete: 'off' }),
+    f('full_name', 'Full name *', { required: true, autocomplete: 'off' }),
+    f('phone', 'Phone', { type: 'tel', autocomplete: 'off' }),
     f('email', 'Email', { type: 'email', autocomplete: 'off' }),
-    f('company', 'Công ty', { autocomplete: 'off' }),
-    h('label', { class: 'field wide' }, 'Ghi chú', h('textarea', { name: 'note', rows: 2, value: r.note ?? '' })),
-    h('label', { class: 'field' }, 'Trạng thái',
+    f('company', 'Company / fund', { autocomplete: 'off' }),
+    h('label', { class: 'field wide' }, 'Note', h('textarea', { name: 'note', rows: 2, value: r.note ?? '' })),
+    h('label', { class: 'field' }, 'Status',
       h('select', { name: 'status', value: r.status ?? 'registered' },
         Object.entries(STATUS).map(([k, v]) => h('option', { value: k }, v.label)))),
     h('label', { class: 'field checkbox' },
-      h('input', { type: 'checkbox', name: 'is_walk_in', checked: !!r.is_walk_in }), 'Khách walk-in'),
+      h('input', { type: 'checkbox', name: 'is_walk_in', checked: !!r.is_walk_in }), 'Walk-in guest'),
     // Chỉ admin được đổi phòng/khung giờ/ngày của khách đã có. Người trực chỉ chọn khi thêm mới.
     (admin || isNew) ? [
-      h('label', { class: 'field' }, 'Phòng',
+      h('label', { class: 'field' }, 'Room',
         h('select', { name: 'room_id', value: String(r.room_id ?? allowedRooms[0]?.id) },
           allowedRooms.map((x) => h('option', { value: x.id }, x.name)))),
-      h('label', { class: 'field' }, 'Khung giờ',
+      h('label', { class: 'field' }, 'Time slot',
         h('select', { name: 'slot_id', value: String(r.slot_id ?? S.slots[0]?.id) },
           S.slots.map((s) => h('option', { value: s.id }, s.label)))),
-      admin ? h('label', { class: 'field' }, 'Ngày',
+      admin ? h('label', { class: 'field' }, 'Date',
         h('input', { type: 'date', name: 'event_date', value: r.event_date ?? S.date })) : null,
     ] : null);
 
   const save = async () => {
     const val = (n) => form.querySelector(`[name=${n}]`);
     const name = val('full_name').value.trim();
-    if (!name) { val('full_name').focus(); return toast('Nhập họ tên khách', 'error'); }
+    if (!name) { val('full_name').focus(); return toast('Enter the guest name', 'error'); }
     const payload = {
       full_name: name,
       phone: val('phone').value.trim() || null,
@@ -366,24 +366,24 @@ function editAttendee(r) {
     if (isNew) {
       const { error } = await sb.from('attendees').insert(payload);
       if (error) return toast(errMsg(error), 'error');
-      toast(`Đã thêm ${name}`, 'success');
+      toast(`Added ${name}`, 'success');
       close(); await refresh();
     } else if (await updateAttendee(r.id, payload)) {
-      toast('Đã lưu', 'success'); close();
+      toast('Saved', 'success'); close();
     }
   };
 
   const actions = [
     !isNew && admin ? h('button', { type: 'button', class: 'btn danger left', onclick: async () => {
-      if (!(await confirmBox(`Xoá hẳn "${r.full_name}" khỏi hệ thống? (Nhật ký vẫn lưu lại)`, 'Xoá', true))) return;
+      if (!(await confirmBox(`Permanently delete "${r.full_name}"? (The activity log keeps a record.)`, 'Delete', true))) return;
       const { error } = await sb.from('attendees').delete().eq('id', r.id);
       if (error) return toast(errMsg(error), 'error');
-      toast('Đã xoá', 'success'); close(); await refresh();
-    } }, 'Xoá hẳn') : null,
-    h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Đóng'),
-    h('button', { type: 'submit', class: 'btn primary', onclick: save }, isNew ? 'Thêm khách' : 'Lưu'),
+      toast('Deleted', 'success'); close(); await refresh();
+    } }, 'Delete') : null,
+    h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Close'),
+    h('button', { type: 'submit', class: 'btn primary', onclick: save }, isNew ? 'Add guest' : 'Save'),
   ].filter(Boolean);
-  const close = openModal(isNew ? 'Thêm khách' : 'Sửa thông tin khách', form, actions);
+  const close = openModal(isNew ? 'Add guest' : 'Edit guest', form, actions);
   form.querySelector('[name=full_name]').focus();
 }
 
@@ -413,19 +413,19 @@ function StaffView() {
   const header = TopBar(h('div', { class: 'toolbar' },
     DatePicker(),
     roomIds.length > 1
-      ? h('select', { id: 'room-pick', 'aria-label': 'Phòng', value: String(S.staffRoom),
+      ? h('select', { id: 'room-pick', 'aria-label': 'Room', value: String(S.staffRoom),
           onchange: (e) => { S.staffRoom = Number(e.target.value); render(); } },
           roomIds.map((id) => h('option', { value: id }, roomName(id))))
       : null));
 
   if (!roomIds.length) {
     return h('div', null, header, h('main', { class: 'wrap' }, h('div', { class: 'card empty' },
-      `Bạn không được phân công phòng nào vào ngày ${fmtDate(S.date)}.`)));
+      `You are not assigned to any room on ${fmtDate(S.date)}.`)));
   }
 
   const roomRows = S.rows.filter((r) => r.room_id === S.staffRoom);
   const cap = capOf(S.staffRoom);
-  const tabs = h('nav', { class: 'slot-tabs', 'aria-label': 'Khung giờ' }, S.slots.map((s) => {
+  const tabs = h('nav', { class: 'slot-tabs', 'aria-label': 'Time slots' }, S.slots.map((s) => {
     const rs = roomRows.filter((r) => r.slot_id === s.id);
     const n = activeCount(rs);
     const inN = rs.filter((r) => r.status === 'checked_in').length;
@@ -454,17 +454,17 @@ function StaffView() {
       meetingOf(S.staffRoom, S.staffSlot) ? h('span', { class: 'meeting-tag' }, meetingText(meetingOf(S.staffRoom, S.staffSlot))) : null),
     tabs,
     h('div', { class: 'stats' },
-      Stat('Đã check-in', `${inN}/${n}`),
-      Stat('Sức chứa', `${n}/${cap}`, n > cap ? 'over' : n >= cap ? 'full' : ''),
-      Stat('Chưa đến', slotRows.filter((r) => r.status === 'registered').length)),
+      Stat('Checked in', `${inN}/${n}`),
+      Stat('Capacity', `${n}/${cap}`, n > cap ? 'over' : n >= cap ? 'full' : ''),
+      Stat('Not arrived', slotRows.filter((r) => r.status === 'registered').length)),
     h('div', { class: 'toolbar' },
-      h('input', { id: 'staff-q', type: 'search', placeholder: 'Tìm tên, SĐT, công ty…', value: S.staffQ,
+      h('input', { id: 'staff-q', type: 'search', placeholder: 'Search name, phone, company…', value: S.staffQ,
         oninput: (e) => { S.staffQ = e.target.value; render(); } }),
       h('button', { class: 'btn primary', disabled: n >= cap,
-        title: n >= cap ? 'Đã đủ chỗ — liên hệ admin' : null,
+        title: n >= cap ? 'Full — contact an admin' : null,
         onclick: () => editAttendee({ room_id: S.staffRoom, slot_id: S.staffSlot, event_date: S.date, is_walk_in: true }) },
-        '+ Thêm khách')),
-    shown.length ? list : h('div', { class: 'card empty' }, slotRows.length ? 'Không tìm thấy khách phù hợp.' : 'Chưa có khách trong khung giờ này.')));
+        '+ Add guest')),
+    shown.length ? list : h('div', { class: 'card empty' }, slotRows.length ? 'No matching guests.' : 'No guests in this time slot yet.')));
 }
 
 const ORDER = { registered: 0, checked_in: 1, no_show: 2, cancelled: 3 };
@@ -478,7 +478,7 @@ function Stat(label, value, cls = '') {
 //  ADMIN VIEW
 // ===================================================================
 const TABS = [
-  ['overview', 'Tổng quan'], ['list', 'Danh sách khách'], ['staff', 'Nhân sự'], ['log', 'Nhật ký'], ['settings', 'Cài đặt'],
+  ['overview', 'Overview'], ['list', 'Guest list'], ['staff', 'Staff'], ['log', 'Activity log'], ['settings', 'Settings'],
 ];
 
 function AdminView() {
@@ -508,32 +508,32 @@ function Overview() {
     const m = meetingOf(room.id, s.id);
     const cls = n > cap ? 'over' : n === cap ? 'full' : (n === 0 && !m) ? 'zero' : '';
     return h('td', null, h('button', { class: `cell ${cls}`,
-      title: `${room.name} · ${s.label}${m ? ' · ' + meetingText(m) : ''}: ${n} khách, ${inN} đã check-in`,
+      title: `${room.name} · ${s.label}${m ? ' · ' + meetingText(m) : ''}: ${n} guests, ${inN} checked in`,
       onclick: () => { Object.assign(S.filters, { room: String(room.id), slot: String(s.id), status: '', q: '' }); S.tab = 'list'; render(); } },
       m ? h('span', { class: 'cell-title' }, m.title) : null,
       h('span', { class: 'cell-n' }, `${n}/${cap}`), h('span', { class: 'cell-in' }, `✓ ${inN}`)));
   };
   const table = h('table', { class: 'grid' },
-    h('thead', null, h('tr', null, h('th', null, 'Giờ'),
-      S.rooms.map((room) => h('th', null, room.name, h('div', { class: 'muted small' }, `${capOf(room.id)} chỗ`))))),
+    h('thead', null, h('tr', null, h('th', null, 'Time'),
+      S.rooms.map((room) => h('th', null, room.name, h('div', { class: 'muted small' }, `${capOf(room.id)} seats`))))),
     h('tbody', null,
       S.slots.map((s) => h('tr', null,
         h('th', { scope: 'row' }, hhmm(s.start_time)),
         S.rooms.map((room) => cellBtn(room, s)))),
-      h('tr', { class: 'total-row' }, h('th', { scope: 'row' }, 'Tổng'),
+      h('tr', { class: 'total-row' }, h('th', { scope: 'row' }, 'Total'),
         S.rooms.map((room) => h('td', { class: 'num' }, `${activeCount(S.rows.filter((r) => r.room_id === room.id))}`)))));
 
   return [
     h('div', { class: 'stats' },
-      Stat('Khách đăng ký', live.length),
-      Stat('Đã check-in', `${totalIn} (${live.length ? Math.round(totalIn * 100 / live.length) : 0}%)`),
+      Stat('Guests', live.length),
+      Stat('Checked in', `${totalIn} (${live.length ? Math.round(totalIn * 100 / live.length) : 0}%)`),
       Stat('Walk-in', walkIns),
-      Stat('Đã huỷ', S.rows.filter((r) => r.status === 'cancelled').length),
-      Stat('Cuộc họp', S.meetings.length),
-      Stat('Sức chứa ngày', `${live.length}/${S.rooms.reduce((t, r) => t + capOf(r.id), 0) * S.slots.length}`)),
+      Stat('Cancelled', S.rows.filter((r) => r.status === 'cancelled').length),
+      Stat('Meetings', S.meetings.length),
+      Stat('Day capacity', `${live.length}/${S.rooms.reduce((t, r) => t + capOf(r.id), 0) * S.slots.length}`)),
     h('div', { class: 'card' },
-      h('div', { class: 'card-head' }, h('h2', null, `Lịch ngày ${fmtDate(S.date)}`),
-        h('span', { class: 'muted small' }, 'Bấm vào ô để xem/sửa danh sách')),
+      h('div', { class: 'card-head' }, h('h2', null, `Schedule ${fmtDate(S.date)}`),
+        h('span', { class: 'muted small' }, 'Click a cell to view or edit its guests')),
       h('div', { class: 'scroll-x' }, table)),
   ];
 }
@@ -559,27 +559,27 @@ function AdminList() {
 
   return [
     h('div', { class: 'toolbar wrap-row' },
-      h('input', { id: 'admin-q', type: 'search', placeholder: 'Tìm tên, SĐT, công ty…', value: F.q,
+      h('input', { id: 'admin-q', type: 'search', placeholder: 'Search name, phone, company…', value: F.q,
         oninput: (e) => { F.q = e.target.value; render(); } }),
-      sel('f-room', 'room', 'Tất cả phòng', S.rooms.map((r) => h('option', { value: r.id }, r.name))),
-      sel('f-slot', 'slot', 'Tất cả khung giờ', S.slots.map((s) => h('option', { value: s.id }, s.label))),
-      sel('f-status', 'status', 'Mọi trạng thái', Object.entries(STATUS).map(([k, v]) => h('option', { value: k }, v.label))),
+      sel('f-room', 'room', 'All rooms', S.rooms.map((r) => h('option', { value: r.id }, r.name))),
+      sel('f-slot', 'slot', 'All time slots', S.slots.map((s) => h('option', { value: s.id }, s.label))),
+      sel('f-status', 'status', 'All statuses', Object.entries(STATUS).map(([k, v]) => h('option', { value: k }, v.label))),
       (F.room || F.slot || F.status || F.q) ? h('button', { class: 'btn ghost', onclick: () => {
-        Object.assign(F, { room: '', slot: '', status: '', q: '' }); render(); } }, 'Xoá bộ lọc') : null,
+        Object.assign(F, { room: '', slot: '', status: '', q: '' }); render(); } }, 'Clear filters') : null,
       h('span', { class: 'spacer' }),
-      h('button', { class: 'btn', onclick: () => importFile() }, 'Nhập Excel/CSV'),
-      h('button', { class: 'btn', onclick: () => exportCsv(rows) }, 'Xuất CSV'),
+      h('button', { class: 'btn', onclick: () => importFile() }, 'Import Excel/CSV'),
+      h('button', { class: 'btn', onclick: () => exportCsv(rows) }, 'Export CSV'),
       h('button', { class: 'btn primary', onclick: () => editAttendee({
-        room_id: Number(F.room) || S.rooms[0]?.id, slot_id: Number(F.slot) || S.slots[0]?.id, event_date: S.date }) }, '+ Thêm khách')),
+        room_id: Number(F.room) || S.rooms[0]?.id, slot_id: Number(F.slot) || S.slots[0]?.id, event_date: S.date }) }, '+ Add guest')),
     F.room && F.slot ? h('div', { class: 'room-head' },
       h('h2', null, `${roomName(Number(F.room))} · ${slotLabel(Number(F.slot))}`),
       meetingOf(Number(F.room), Number(F.slot)) ? h('span', { class: 'meeting-tag' }, meetingText(meetingOf(Number(F.room), Number(F.slot)))) : null,
-      h('span', { class: 'muted' }, `${activeCount(rows)}/${capOf(Number(F.room))} khách`),
+      h('span', { class: 'muted' }, `${activeCount(rows)}/${capOf(Number(F.room))} guests`),
       h('button', { class: 'btn small ghost', onclick: () => editMeeting(Number(F.room), Number(F.slot)) },
-        meetingOf(Number(F.room), Number(F.slot)) ? 'Sửa cuộc họp' : '+ Đặt tên cuộc họp')) : null,
-    h('p', { class: 'muted small' }, `${rows.length} kết quả`),
+        meetingOf(Number(F.room), Number(F.slot)) ? 'Edit meeting' : '+ Name this meeting')) : null,
+    h('p', { class: 'muted small' }, `${rows.length} results`),
     rows.length ? h('ul', { class: 'att-list' }, rows.map((r) => AttendeeRow(r, { showPlace })))
-      : h('div', { class: 'card empty' }, 'Không có khách phù hợp.'),
+      : h('div', { class: 'card empty' }, 'No matching guests.'),
   ];
 }
 
@@ -613,17 +613,17 @@ function StaffAdmin() {
     const email = fd.get('email').trim().toLowerCase();
     if (!email) return;
     const ok = await staffMutate(sb.from('staff').insert({ email, full_name: fd.get('full_name').trim() || null, role: fd.get('role') }),
-      `Đã thêm ${email}`);
+      `Added ${email}`);
     if (ok && fd.get('room')) {
       await staffMutate(sb.from('room_assignments').insert({ email, room_id: Number(fd.get('room')), event_date: null }));
     }
   } },
     h('input', { name: 'email', type: 'email', required: true, placeholder: 'email@congty.com', 'aria-label': 'Email' }),
-    h('input', { name: 'full_name', placeholder: 'Họ tên', 'aria-label': 'Họ tên' }),
-    h('select', { name: 'role', 'aria-label': 'Vai trò' }, h('option', { value: 'staff' }, 'Trực phòng'), h('option', { value: 'admin' }, 'Admin')),
-    h('select', { name: 'room', 'aria-label': 'Phòng' }, h('option', { value: '' }, '— Phân công sau —'),
-      S.rooms.map((r) => h('option', { value: r.id }, `${r.name} (mọi ngày)`))),
-    h('button', { class: 'btn primary', type: 'submit' }, '+ Thêm nhân sự'));
+    h('input', { name: 'full_name', placeholder: 'Name', 'aria-label': 'Name' }),
+    h('select', { name: 'role', 'aria-label': 'Role' }, h('option', { value: 'staff' }, 'Room staff'), h('option', { value: 'admin' }, 'Admin')),
+    h('select', { name: 'room', 'aria-label': 'Room' }, h('option', { value: '' }, '— Assign later —'),
+      S.rooms.map((r) => h('option', { value: r.id }, `${r.name} (all days)`))),
+    h('button', { class: 'btn primary', type: 'submit' }, '+ Add staff'));
 
   // Phòng nào chưa có người trực trong ngày đang xem
   const covered = new Set(S.assignments.filter((a) => !a.event_date || a.event_date === S.date)
@@ -632,42 +632,42 @@ function StaffAdmin() {
 
   const rows = S.staffList.map((s) => {
     const mine = S.assignments.filter((a) => a.email === s.email);
-    const roomSel = h('select', { 'aria-label': 'Phòng' }, S.rooms.map((r) => h('option', { value: r.id }, r.name)));
-    const dateSel = h('select', { 'aria-label': 'Ngày' }, h('option', { value: '' }, 'Mọi ngày'),
+    const roomSel = h('select', { 'aria-label': 'Room' }, S.rooms.map((r) => h('option', { value: r.id }, r.name)));
+    const dateSel = h('select', { 'aria-label': 'Date' }, h('option', { value: '' }, 'All days'),
       dates.map((d) => h('option', { value: d }, fmtDate(d))));
     return h('li', { class: `staff-row ${s.active ? '' : 'inactive'}` },
       h('div', { class: 'staff-main' },
         h('div', null, h('strong', null, s.full_name || s.email), ' ',
-          h('span', { class: `badge ${s.role === 'admin' ? 'st-in' : 'st-reg'}` }, s.role === 'admin' ? 'Admin' : 'Trực phòng'),
-          s.active ? null : h('span', { class: 'badge st-cx' }, 'Đã khoá')),
+          h('span', { class: `badge ${s.role === 'admin' ? 'st-in' : 'st-reg'}` }, s.role === 'admin' ? 'Admin' : 'Room staff'),
+          s.active ? null : h('span', { class: 'badge st-cx' }, 'Locked')),
         h('div', { class: 'muted small' }, s.email),
-        s.role === 'admin' ? h('div', { class: 'muted small' }, 'Xem được toàn bộ') :
+        s.role === 'admin' ? h('div', { class: 'muted small' }, 'Can see everything') :
         h('div', { class: 'chips' }, mine.length ? mine.map((a) => h('span', { class: 'chip' },
-          `${roomName(a.room_id)} · ${a.event_date ? fmtDate(a.event_date) : 'mọi ngày'}`,
-          h('button', { class: 'chip-x', 'aria-label': 'Bỏ phân công', onclick: () =>
-            staffMutate(sb.from('room_assignments').delete().eq('id', a.id), 'Đã bỏ phân công') }, '×')))
-          : h('span', { class: 'muted small' }, 'Chưa phân công phòng'))),
+          `${roomName(a.room_id)} · ${a.event_date ? fmtDate(a.event_date) : 'all days'}`,
+          h('button', { class: 'chip-x', 'aria-label': 'Remove assignment', onclick: () =>
+            staffMutate(sb.from('room_assignments').delete().eq('id', a.id), 'Assignment removed') }, '×')))
+          : h('span', { class: 'muted small' }, 'No room assigned'))),
       h('div', { class: 'staff-actions' },
         s.role === 'admin' ? null : h('div', { class: 'toolbar' }, roomSel, dateSel,
           h('button', { class: 'btn small', onclick: () => staffMutate(
             sb.from('room_assignments').insert({ email: s.email, room_id: Number(roomSel.value), event_date: dateSel.value || null }),
-            'Đã phân công') }, 'Phân công')),
+            'Assigned') }, 'Assign')),
         h('div', { class: 'toolbar' },
           s.email === S.me.email ? null : h('button', { class: 'btn small ghost', onclick: () =>
-            staffMutate(sb.from('staff').update({ active: !s.active }).eq('email', s.email), s.active ? 'Đã khoá' : 'Đã mở khoá') },
-            s.active ? 'Khoá' : 'Mở khoá'),
+            staffMutate(sb.from('staff').update({ active: !s.active }).eq('email', s.email), s.active ? 'Locked' : 'Unlocked') },
+            s.active ? 'Lock' : 'Unlock'),
           s.email === S.me.email ? null : h('button', { class: 'btn small ghost danger-text', onclick: async () => {
-            if (await confirmBox(`Xoá ${s.email} khỏi danh sách nhân sự?`, 'Xoá', true))
-              staffMutate(sb.from('staff').delete().eq('email', s.email), 'Đã xoá');
-          } }, 'Xoá'))));
+            if (await confirmBox(`Remove ${s.email} from the staff list?`, 'Remove', true))
+              staffMutate(sb.from('staff').delete().eq('email', s.email), 'Removed');
+          } }, 'Remove'))));
   });
 
   return [
-    h('div', { class: 'card stack' }, h('h2', null, 'Thêm nhân sự'),
-      h('p', { class: 'muted small' }, 'Người trực đăng nhập bằng đúng email này. Họ chỉ thấy khách của phòng được phân công.'),
+    h('div', { class: 'card stack' }, h('h2', null, 'Add staff'),
+      h('p', { class: 'muted small' }, 'Staff sign in with exactly this email. They only see guests in the rooms assigned to them.'),
       addForm),
     uncovered.length ? h('div', { class: 'card warn' },
-      `Ngày ${fmtDate(S.date)} chưa có người trực: ${uncovered.map((r) => r.name).join(', ')}`) : null,
+      `No staff assigned on ${fmtDate(S.date)} for: ${uncovered.map((r) => r.name).join(', ')}`) : null,
     h('ul', { class: 'staff-list' }, rows),
   ];
 }
@@ -679,14 +679,14 @@ async function loadLogs() {
   S.logs = data;
 }
 
-const LOG_FIELDS = { full_name: 'Tên', phone: 'SĐT', email: 'Email', company: 'Công ty', note: 'Ghi chú',
-  status: 'Trạng thái', room_id: 'Phòng', slot_id: 'Khung giờ', event_date: 'Ngày', is_walk_in: 'Walk-in' };
+const LOG_FIELDS = { full_name: 'Name', phone: 'Phone', email: 'Email', company: 'Company', note: 'Note',
+  status: 'Status', room_id: 'Room', slot_id: 'Time slot', event_date: 'Date', is_walk_in: 'Walk-in' };
 const logVal = (k, v) => v == null || v === '' ? '∅'
   : k === 'status' ? STATUS[v]?.label ?? v : k === 'room_id' ? roomName(v) : k === 'slot_id' ? slotLabel(v)
-  : k === 'is_walk_in' ? (v ? 'có' : 'không') : String(v);
+  : k === 'is_walk_in' ? (v ? 'yes' : 'no') : String(v);
 
 function LogView() {
-  if (!S.logs.length) return h('div', { class: 'card empty' }, 'Chưa có thay đổi nào.');
+  if (!S.logs.length) return h('div', { class: 'card empty' }, 'No changes yet.');
   return h('ul', { class: 'log-list' }, S.logs.map((l) => {
     const d = l.new_data || l.old_data || {};
     let detail;
@@ -696,13 +696,13 @@ function LogView() {
     } else {
       detail = `${roomName(d.room_id)} · ${hhmm(slotById(d.slot_id)?.start_time)} · ${d.event_date ? fmtDate(d.event_date) : ''}`;
     }
-    const verb = { insert: 'Thêm', update: 'Sửa', delete: 'Xoá' }[l.action];
+    const verb = { insert: 'Added', update: 'Edited', delete: 'Deleted' }[l.action];
     return h('li', null,
       h('span', { class: 'muted small log-time' }, fmtDateTime(l.changed_at)),
       h('span', { class: `badge log-${l.action}` }, verb),
       h('strong', null, d.full_name ?? '—'),
       h('span', { class: 'small' }, detail),
-      h('span', { class: 'muted small' }, l.changed_by ?? 'hệ thống'));
+      h('span', { class: 'muted small' }, l.changed_by ?? 'system'));
   }));
 }
 
@@ -713,28 +713,28 @@ function SettingsView() {
     e.preventDefault();
     const fd = new FormData(e.target);
     const { error } = await sb.from('settings').update({
-      event_name: fd.get('event_name').trim() || 'Sự kiện', capacity: Number(fd.get('capacity')),
+      event_name: fd.get('event_name').trim() || 'Event', capacity: Number(fd.get('capacity')),
     }).eq('id', true);
     if (error) return toast(errMsg(error), 'error');
-    await reloadConfig('Đã lưu cài đặt');
+    await reloadConfig('Settings saved');
   } },
-    h('label', { class: 'field' }, 'Tên sự kiện', h('input', { name: 'event_name', value: st.event_name })),
-    h('label', { class: 'field' }, 'Số khách tối đa / khung giờ', h('input', { name: 'capacity', type: 'number', min: 1, max: 500, value: st.capacity })),
-    h('div', { class: 'field wide' }, h('button', { class: 'btn primary', type: 'submit' }, 'Lưu')));
+    h('label', { class: 'field' }, 'Event name', h('input', { name: 'event_name', value: st.event_name })),
+    h('label', { class: 'field' }, 'Default capacity per time slot', h('input', { name: 'capacity', type: 'number', min: 1, max: 500, value: st.capacity })),
+    h('div', { class: 'field wide' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save')));
 
   const saveDates = async (arr) => {
     const { error } = await sb.from('settings').update({ event_dates: [...new Set(arr)].sort() }).eq('id', true);
     if (error) return toast(errMsg(error), 'error');
-    await reloadConfig('Đã cập nhật ngày');
+    await reloadConfig('Dates updated');
   };
-  const newDate = h('input', { type: 'date', 'aria-label': 'Ngày mới' });
+  const newDate = h('input', { type: 'date', 'aria-label': 'New date' });
   const dates = h('div', { class: 'stack' },
     h('div', { class: 'chips' }, (st.event_dates || []).length
       ? [...st.event_dates].sort().map((d) => h('span', { class: 'chip' }, fmtDate(d),
-          h('button', { class: 'chip-x', 'aria-label': `Bỏ ngày ${fmtDate(d)}`, onclick: () => saveDates(st.event_dates.filter((x) => x !== d)) }, '×')))
-      : h('span', { class: 'muted small' }, 'Chưa khai báo — sẽ cho chọn ngày tự do')),
+          h('button', { class: 'chip-x', 'aria-label': `Remove ${fmtDate(d)}`, onclick: () => saveDates(st.event_dates.filter((x) => x !== d)) }, '×')))
+      : h('span', { class: 'muted small' }, 'None yet — any date can be picked')),
     h('div', { class: 'toolbar' }, newDate,
-      h('button', { class: 'btn', onclick: () => newDate.value && saveDates([...(st.event_dates || []), newDate.value]) }, '+ Thêm ngày')));
+      h('button', { class: 'btn', onclick: () => newDate.value && saveDates([...(st.event_dates || []), newDate.value]) }, '+ Add date')));
 
   const rooms = h('form', { class: 'grid-form', onsubmit: async (e) => {
     e.preventDefault();
@@ -743,20 +743,20 @@ function SettingsView() {
       capacity: Number(fd.get(`cap-${r.id}`)) || null }));
     const { error } = await sb.from('rooms').upsert(upd);
     if (error) return toast(errMsg(error), 'error');
-    await reloadConfig('Đã lưu phòng');
+    await reloadConfig('Rooms saved');
   } },
-    S.rooms.map((r) => h('div', { class: 'field room-edit' }, `Phòng #${r.id}`,
+    S.rooms.map((r) => h('div', { class: 'field room-edit' }, `Room #${r.id}`,
       h('div', { class: 'toolbar' },
-        h('input', { name: `room-${r.id}`, value: r.name, 'aria-label': 'Tên phòng' }),
+        h('input', { name: `room-${r.id}`, value: r.name, 'aria-label': 'Room name' }),
         h('input', { name: `cap-${r.id}`, type: 'number', min: 1, max: 1000, value: r.capacity ?? '', placeholder: String(capacity()),
-          'aria-label': 'Sức chứa', class: 'cap-input', title: 'Sức chứa (trống = dùng mức chung)' }),
-        h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Xoá ${r.name}`, title: 'Xoá phòng', onclick: async () => {
-          if (!(await confirmBox(`Xoá ${r.name}? Chỉ xoá được khi phòng chưa có khách.`, 'Xoá', true))) return;
+          'aria-label': 'Capacity', class: 'cap-input', title: 'Capacity (empty = default)' }),
+        h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Delete ${r.name}`, title: 'Delete room', onclick: async () => {
+          if (!(await confirmBox(`Delete ${r.name}? Only possible while the room has no guests.`, 'Delete', true))) return;
           const { error } = await sb.from('rooms').delete().eq('id', r.id);
-          if (error) return toast(/foreign key|violates/i.test(error.message) ? 'Phòng đang có khách, không xoá được.' : errMsg(error), 'error');
-          await reloadConfig(`Đã xoá ${r.name}`);
+          if (error) return toast(/foreign key|violates/i.test(error.message) ? 'This room still has guests and cannot be deleted.' : errMsg(error), 'error');
+          await reloadConfig(`Deleted ${r.name}`);
         } }, '✕')))),
-    h('div', { class: 'field wide' }, h('button', { class: 'btn primary', type: 'submit' }, 'Lưu phòng')));
+    h('div', { class: 'field wide' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save rooms')));
 
   const slots = h('form', { class: 'stack', onsubmit: async (e) => {
     e.preventDefault();
@@ -767,27 +767,27 @@ function SettingsView() {
     });
     const { error } = await sb.from('time_slots').upsert(upd);
     if (error) return toast(errMsg(error), 'error');
-    await reloadConfig('Đã lưu khung giờ');
+    await reloadConfig('Time slots saved');
   } },
     S.slots.map((s) => h('div', { class: 'toolbar' }, h('span', { class: 'slot-idx' }, `#${s.id}`),
-      h('input', { type: 'time', name: `s-${s.id}-start`, value: hhmm(s.start_time), 'aria-label': 'Bắt đầu' }), '→',
-      h('input', { type: 'time', name: `s-${s.id}-end`, value: hhmm(s.end_time), 'aria-label': 'Kết thúc' }))),
-    h('div', null, h('button', { class: 'btn primary', type: 'submit' }, 'Lưu khung giờ')));
+      h('input', { type: 'time', name: `s-${s.id}-start`, value: hhmm(s.start_time), 'aria-label': 'Start' }), '→',
+      h('input', { type: 'time', name: `s-${s.id}-end`, value: hhmm(s.end_time), 'aria-label': 'End' }))),
+    h('div', null, h('button', { class: 'btn primary', type: 'submit' }, 'Save time slots')));
 
   return [
-    h('div', { class: 'card stack' }, h('h2', null, 'Chung'), general),
-    h('div', { class: 'card stack' }, h('h2', null, 'Ngày diễn ra sự kiện'), dates),
-    h('div', { class: 'card stack' }, h('h2', null, 'Phòng & sức chứa'),
-      h('p', { class: 'muted small' }, 'Ô số là sức chứa riêng của phòng; để trống thì dùng mức chung ở trên.'), rooms),
-    h('div', { class: 'card stack' }, h('h2', null, 'Khung giờ'), slots),
+    h('div', { class: 'card stack' }, h('h2', null, 'General'), general),
+    h('div', { class: 'card stack' }, h('h2', null, 'Event dates'), dates),
+    h('div', { class: 'card stack' }, h('h2', null, 'Rooms & capacity'),
+      h('p', { class: 'muted small' }, 'The number is the room capacity; leave it empty to use the default above.'), rooms),
+    h('div', { class: 'card stack' }, h('h2', null, 'Time slots'), slots),
   ];
 }
 
 function editMeeting(roomId, slotId) {
   const m = meetingOf(roomId, slotId);
   const form = h('div', { class: 'grid-form' },
-    h('label', { class: 'field' }, 'Cuộc họp (vd. GMD 1)', h('input', { name: 'title', value: m?.title ?? '' })),
-    h('label', { class: 'field' }, 'Người chủ trì', h('input', { name: 'host', value: m?.host ?? '' })));
+    h('label', { class: 'field' }, 'Meeting (e.g. GMD 1)', h('input', { name: 'title', value: m?.title ?? '' })),
+    h('label', { class: 'field' }, 'Host', h('input', { name: 'host', value: m?.host ?? '' })));
   const save = async () => {
     const title = form.querySelector('[name=title]').value.trim();
     const host = form.querySelector('[name=host]').value.trim() || null;
@@ -796,11 +796,11 @@ function editMeeting(roomId, slotId) {
     else if (m) res = await sb.from('meetings').update({ title, host }).eq('id', m.id);
     else res = await sb.from('meetings').insert({ event_date: S.date, room_id: roomId, slot_id: slotId, title, host });
     if (res.error) return toast(errMsg(res.error), 'error');
-    close(); toast('Đã lưu cuộc họp', 'success'); await refresh();
+    close(); toast('Meeting saved', 'success'); await refresh();
   };
   const close = openModal(`${roomName(roomId)} · ${slotLabel(slotId)}`, form, [
-    h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Đóng'),
-    h('button', { type: 'submit', class: 'btn primary', onclick: save }, 'Lưu')]);
+    h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Close'),
+    h('button', { type: 'submit', class: 'btn primary', onclick: save }, 'Save')]);
 }
 
 async function reloadConfig(msg) {
@@ -850,11 +850,11 @@ function downloadCsv(filename, rows) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-const CSV_HEADER = ['ngay', 'phong', 'khung_gio', 'ho_ten', 'sdt', 'email', 'cong_ty', 'ghi_chu'];
+const CSV_HEADER = ['date', 'room', 'slot', 'full_name', 'phone', 'email', 'company', 'note'];
 
 function exportCsv(rows) {
-  downloadCsv(`khach-${S.date}.csv`, [
-    [...CSV_HEADER, 'trang_thai', 'walk_in', 'checkin_luc'],
+  downloadCsv(`guests-${S.date}.csv`, [
+    [...CSV_HEADER, 'status', 'walk_in', 'checked_in_at'],
     ...rows.map((r) => [r.event_date, roomName(r.room_id), hhmm(slotById(r.slot_id)?.start_time), r.full_name, r.phone, r.email,
       r.company, r.note, STATUS[r.status].label, r.is_walk_in ? 'x' : '', r.checked_in_at ? fmtDateTime(r.checked_in_at) : '']),
   ]);
@@ -896,7 +896,7 @@ function loadXlsx() {
       const s = document.createElement('script');
       s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
       s.onload = () => resolve(window.XLSX);
-      s.onerror = () => { xlsxLib = null; reject(new Error('Không tải được thư viện đọc Excel, kiểm tra mạng.')); };
+      s.onerror = () => { xlsxLib = null; reject(new Error('Could not load the Excel reader. Check your connection.')); };
       document.head.append(s);
     });
   }
@@ -928,26 +928,26 @@ function parseRoomSheet(sheetName, rows) {
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const label = norm(cellStr(rows[i][0])).replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
     const val = cellStr(rows[i][1]);
-    if (label.startsWith('ten phong')) meta.name = val;
-    else if (label.startsWith('ten nguoi truc')) meta.staffName = val;
-    else if (label.startsWith('nguoi truc')) meta.emails = val.split(/[,;\s]+/).map((x) => x.toLowerCase()).filter(Boolean);
-    else if (label.startsWith('ngay')) meta.date = val;
-    if (rows[i].some((c) => norm(cellStr(c)) === 'ho ten')) { headerIdx = i; break; }
+    if (label.startsWith('ten phong') || label.startsWith('room name')) meta.name = val;
+    else if (label.startsWith('ten nguoi truc') || label.startsWith('staff name')) meta.staffName = val;
+    else if (label.startsWith('nguoi truc') || label.startsWith('staff email') || label.startsWith('room staff')) meta.emails = val.split(/[,;\s]+/).map((x) => x.toLowerCase()).filter(Boolean);
+    else if (label.startsWith('ngay') || label.startsWith('date')) meta.date = val;
+    if (rows[i].some((c) => ['ho ten', 'full name'].includes(norm(cellStr(c))))) { headerIdx = i; break; }
   }
   if (headerIdx < 0) return null; // không phải sheet phòng
 
   const where = `Sheet "${sheetName}"`;
   const room_id = matchRoom(sheetName) ?? matchRoom(meta.name);
-  if (!room_id) { errors.push(`${where}: không xác định được phòng (đặt tên sheet P1…P${S.rooms.length})`); return { errors, guests: [], room: null }; }
+  if (!room_id) { errors.push(`${where}: cannot tell which room this is (name the sheet P1…P${S.rooms.length})`); return { errors, guests: [], room: null }; }
   const date = matchDate(meta.date);
-  if (!date) errors.push(`${where}: ngày "${meta.date}" không hợp lệ (dùng dd/mm/yyyy)`);
+  if (!date) errors.push(`${where}: invalid date "${meta.date}" (use dd/mm/yyyy)`);
   const badEmails = meta.emails.filter((e) => !EMAIL_RE.test(e));
-  if (badEmails.length) errors.push(`${where}: email người trực không hợp lệ: ${badEmails.join(', ')}`);
+  if (badEmails.length) errors.push(`${where}: invalid staff email: ${badEmails.join(', ')}`);
 
   const head = rows[headerIdx].map((c) => norm(cellStr(c)));
   const col = (...names) => head.findIndex((x) => names.includes(x));
-  const idx = { slot: col('khung gio', 'gio', 'thoi gian'), name: col('ho ten'), phone: col('sdt', 'so dien thoai', 'dien thoai'),
-    email: col('email'), company: col('cong ty'), note: col('ghi chu') };
+  const idx = { slot: col('khung gio', 'gio', 'thoi gian', 'time slot', 'time'), name: col('ho ten', 'full name'), phone: col('sdt', 'so dien thoai', 'dien thoai', 'phone'),
+    email: col('email'), company: col('cong ty', 'company', 'company / fund', 'fund'), note: col('ghi chu', 'note', 'notes') };
   const get = (r, i) => (i >= 0 ? cellStr(r[i]) : '');
   const guests = [];
   let lastSlot = '';
@@ -957,7 +957,7 @@ function parseRoomSheet(sheetName, rows) {
     const name = get(r, idx.name);
     if (!name) return; // dòng trống
     const slot_id = matchSlot(slotText);
-    if (!slot_id) { errors.push(`${where} dòng ${headerIdx + n + 2}: khung giờ "${slotText}" không có`); return; }
+    if (!slot_id) { errors.push(`${where} row ${headerIdx + n + 2}: unknown time slot "${slotText}"`); return; }
     if (date) guests.push({ event_date: date, room_id, slot_id, full_name: name, phone: get(r, idx.phone) || null,
       email: get(r, idx.email) || null, company: get(r, idx.company) || null, note: get(r, idx.note) || null });
   });
@@ -985,9 +985,9 @@ function parseFlatRows(rows, label) {
       full_name: get(r, idx.name), phone: get(r, idx.phone) || null, email: get(r, idx.email) || null,
       company: get(r, idx.company) || null, note: get(r, idx.note) || null,
     };
-    const bad = [!rec.full_name && 'thiếu tên', !rec.room_id && `phòng "${get(r, idx.room)}"`,
-      !rec.slot_id && `khung giờ "${get(r, idx.slot)}"`, !rec.event_date && `ngày "${get(r, idx.date)}"`].filter(Boolean);
-    if (bad.length) errors.push(`${label} dòng ${n + 2}: ${bad.join(', ')}`); else guests.push(rec);
+    const bad = [!rec.full_name && 'missing name', !rec.room_id && `room "${get(r, idx.room)}"`,
+      !rec.slot_id && `time slot "${get(r, idx.slot)}"`, !rec.event_date && `date "${get(r, idx.date)}"`].filter(Boolean);
+    if (bad.length) errors.push(`${label} row ${n + 2}: ${bad.join(', ')}`); else guests.push(rec);
   });
   return { errors, guests, room: null };
 }
@@ -1036,7 +1036,7 @@ function parseMasterGrid(sheetName, rows) {
   for (const b of blocks) {
     const first = b.cols[0].col, last = b.cols[b.cols.length - 1].col;
     const timeCol = first - 1;
-    if (timeCol < 0) { out.errors.push(`${where}: khối ${colLetter(first)} không có cột giờ bên trái`); continue; }
+    if (timeCol < 0) { out.errors.push(`${where}: block at ${colLetter(first)} has no time column on its left`); continue; }
     // Nhãn ngày: ô (gộp) phía trên hàng tiêu đề
     let label = '';
     for (let r = 0; r < hr && !label; r++) for (let c = timeCol; c <= last && !label; c++) label = cellStr(rows[r][c]);
@@ -1048,7 +1048,7 @@ function parseMasterGrid(sheetName, rows) {
       if (!/email|truc|staff|access/.test(norm(cellStr(rows[r][timeCol])))) continue;
       for (const rc of b.cols) {
         const list = cellStr(rows[r][rc.col]).split(/[,;\s]+/).map((x) => x.toLowerCase()).filter(Boolean);
-        list.filter((e) => !EMAIL_RE.test(e)).forEach((e) => out.errors.push(`${where} ô ${colLetter(rc.col)}${r + 1}: email "${e}" không hợp lệ`));
+        list.filter((e) => !EMAIL_RE.test(e)).forEach((e) => out.errors.push(`${where} cell ${colLetter(rc.col)}${r + 1}: invalid email "${e}"`));
         emails.set(rc.room_id, [...(emails.get(rc.room_id) || []), ...list.filter((e) => EMAIL_RE.test(e))]);
       }
     }
@@ -1068,7 +1068,7 @@ function parseMasterGrid(sheetName, rows) {
           if (v && !/^\d+$/.test(v)) names.push(v);
         }
         if (!titleText && !names.length) continue;
-        if (!slot_id) { out.errors.push(`${where} ${colLetter(rc.col)}${tr + 1}: khung giờ ${time} không có trong Cài đặt → bỏ qua ${names.length} khách`); continue; }
+        if (!slot_id) { out.errors.push(`${where} ${colLetter(rc.col)}${tr + 1}: time ${time} is not a time slot in Settings → skipped ${names.length} guests`); continue; }
         if (titleText) { out.meetings.push({ _block: b.index, room_id: rc.room_id, slot_id, ...splitMeeting(titleText) }); blk.meetings++; }
         for (const n of names) {
           out.guests.push({ _block: b.index, room_id: rc.room_id, slot_id, ...splitGuest(n), phone: null, email: null, note: null });
@@ -1098,7 +1098,7 @@ async function parseImportFile(f) {
   if (/\.csv$/i.test(f.name) || f.type === 'text/csv') {
     const rows = parseCsv(await f.text());
     const res = rows.length > 1 ? parseFlatRows(rows, 'CSV') : null;
-    if (!res) out.errors.push('CSV cần có cột: phong, khung_gio, ho_ten.');
+    if (!res) out.errors.push('The CSV needs columns: room, slot, full_name.');
     add(res);
     return out;
   }
@@ -1106,11 +1106,11 @@ async function parseImportFile(f) {
   const wb = XLSX.read(await f.arrayBuffer(), { type: 'array', cellDates: true });
   for (const name of wb.SheetNames) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' });
-    if (!rows.length || /^huong dan/.test(norm(name))) continue;
+    if (!rows.length || /^(huong dan|instructions|guide|readme)/.test(norm(name))) continue;
     add(parseMasterGrid(name, rows) ?? parseRoomSheet(name, rows) ?? parseFlatRows(rows, `Sheet "${name}"`));
   }
   // khối của nhiều sheet: đánh lại số thứ tự cho duy nhất
-  if (!out.guests.length && !out.rooms.length && !out.errors.length) out.errors.push('Không nhận ra định dạng file. Dùng file mẫu.');
+  if (!out.guests.length && !out.rooms.length && !out.errors.length) out.errors.push('File format not recognised. Please use a template.');
   return out;
 }
 
@@ -1134,7 +1134,7 @@ async function planImport(guests, meetings, rooms, sync) {
       sb.from('attendees').select('*').eq('event_date', d).limit(10000),
       sb.from('meetings').select('*').eq('event_date', d),
     ]);
-    if (a.error || m.error) fail('Đọc dữ liệu hiện có', a.error || m.error);
+    if (a.error || m.error) fail('Reading current data', a.error || m.error);
     rows.push(...a.data); oldMeetings.push(...m.data);
   }
   const byKey = new Map();
@@ -1192,7 +1192,7 @@ async function runImport(data, blockDates, removeRooms, sync = false, confirmPla
   // 1. Phòng: tạo/đổi tên/sức chứa theo file
   if (data.roomDefs.length) {
     const { error } = await sb.from('rooms').upsert(data.roomDefs);
-    if (error) fail('Cập nhật phòng', error);
+    if (error) fail('Updating rooms', error);
     if (removeRooms) {
       for (const r of S.rooms.filter((x) => !data.roomDefs.some((d) => d.id === x.id))) {
         const { error: e } = await sb.from('rooms').delete().eq('id', r.id);
@@ -1204,7 +1204,7 @@ async function runImport(data, blockDates, removeRooms, sync = false, confirmPla
     if (renames.length) {
       const map = new Map(renames.map((r) => [r.room_id, r.name]));
       const { error } = await sb.from('rooms').upsert(S.rooms.filter((r) => map.has(r.id)).map((r) => ({ ...r, name: map.get(r.id) })));
-      if (error) fail('Đổi tên phòng', error);
+      if (error) fail('Renaming rooms', error);
     }
   }
 
@@ -1213,26 +1213,26 @@ async function runImport(data, blockDates, removeRooms, sync = false, confirmPla
   const newDates = dates.filter((d) => !(S.settings.event_dates || []).includes(d));
   if (newDates.length) {
     const { error } = await sb.from('settings').update({ event_dates: [...(S.settings.event_dates || []), ...newDates].sort() }).eq('id', true);
-    if (error) fail('Thêm ngày', error);
+    if (error) fail('Adding dates', error);
   }
 
   // 3. Người trực: tạo tài khoản (nếu chưa có) + phân công phòng
   if (rooms.some((r) => r.emails.length)) {
     const [st, as] = await Promise.all([sb.from('staff').select('*'), sb.from('room_assignments').select('*')]);
-    if (st.error || as.error) fail('Đọc nhân sự', st.error || as.error);
+    if (st.error || as.error) fail('Reading staff', st.error || as.error);
     const known = new Set(st.data.map((s) => s.email));
     const assigned = new Set(as.data.map((a) => `${a.email}|${a.room_id}|${a.event_date ?? ''}`));
     for (const r of rooms) {
       for (const email of r.emails) {
         if (!known.has(email)) {
           const { error } = await sb.from('staff').insert({ email, full_name: r.staffName || null, role: 'staff' });
-          if (error) fail(`Thêm ${email}`, error);
+          if (error) fail(`Adding ${email}`, error);
           known.add(email); report.staff++;
         }
         const key = `${email}|${r.room_id}|${r.date ?? ''}`;
         if (!assigned.has(key)) {
           const { error } = await sb.from('room_assignments').insert({ email, room_id: r.room_id, event_date: r.date });
-          if (error) fail(`Phân công ${email}`, error);
+          if (error) fail(`Assigning ${email}`, error);
           assigned.add(key); report.assign++;
         }
       }
@@ -1242,15 +1242,15 @@ async function runImport(data, blockDates, removeRooms, sync = false, confirmPla
   // 4. Cuộc họp
   if (plan.mAdd.length) {
     const { error } = await sb.from('meetings').insert(plan.mAdd);
-    if (error) fail('Thêm cuộc họp', error);
+    if (error) fail('Adding meetings', error);
   }
   for (const m of plan.mUpdate) {
     const { error } = await sb.from('meetings').update({ title: m.title, host: m.host }).eq('id', m.id);
-    if (error) fail('Cập nhật cuộc họp', error);
+    if (error) fail('Updating meetings', error);
   }
   for (const m of plan.mDelete) {
     const { error } = await sb.from('meetings').delete().eq('id', m.id);
-    if (error) fail('Xoá cuộc họp', error);
+    if (error) fail('Deleting meetings', error);
   }
   report.meetings = plan.mAdd.length + plan.mUpdate.length;
   report.meetingsDeleted = plan.mDelete.length;
@@ -1258,10 +1258,10 @@ async function runImport(data, blockDates, removeRooms, sync = false, confirmPla
   // 5. Khách: thêm mới / khôi phục / huỷ
   for (let i = 0; i < plan.add.length; i += 500) {
     const { error } = await sb.from('attendees').insert(plan.add.slice(i, i + 500));
-    if (error) fail(`Nhập khách (lô ${i / 500 + 1})`, error);
+    if (error) fail(`Importing guests (batch ${i / 500 + 1})`, error);
   }
-  await updateIds('attendees', plan.restore.map((r) => r.id), { status: 'registered' }, 'Khôi phục khách');
-  await updateIds('attendees', plan.cancel.map((r) => r.id), { status: 'cancelled' }, 'Huỷ khách');
+  await updateIds('attendees', plan.restore.map((r) => r.id), { status: 'registered' }, 'Restoring guests');
+  await updateIds('attendees', plan.cancel.map((r) => r.id), { status: 'cancelled' }, 'Cancelling guests');
   report.restored = plan.restore.length;
   report.cancelled = plan.cancel.length;
   report.dup = plan.same;
@@ -1284,7 +1284,7 @@ function importFile() {
     const f = file.files[0];
     if (!f) return;
     importBtn.disabled = true;
-    preview.replaceChildren(h('p', { class: 'muted' }, 'Đang đọc file…'));
+    preview.replaceChildren(h('p', { class: 'muted' }, 'Reading file…'));
     try { parsed = await parseImportFile(f); }
     catch (e) { preview.replaceChildren(h('p', { class: 'error' }, e.message)); return; }
 
@@ -1292,48 +1292,48 @@ function importFile() {
     syncBox.checked = parsed.blocks.length > 0;
     // Khối ngày (định dạng master): chọn ngày cho từng khối
     const evDates = [...(S.settings.event_dates || [])].sort();
-    dateInputs = parsed.blocks.map((b, i) => h('input', { type: 'date', required: true, 'aria-label': `Ngày của khối ${i + 1}`,
+    dateInputs = parsed.blocks.map((b, i) => h('input', { type: 'date', required: true, 'aria-label': `Date for block ${i + 1}`,
       value: b.defaultDate || evDates[i] || addDays(S.date, i) }));
     const blockTable = parsed.blocks.length ? h('div', { class: 'scroll-x' }, h('table', { class: 'preview' },
-      h('thead', null, h('tr', null, h('th', null, 'Khối'), h('th', null, 'Cột'), h('th', null, 'Ngày'), h('th', null, 'Cuộc họp'), h('th', null, 'Khách'))),
+      h('thead', null, h('tr', null, h('th', null, 'Block'), h('th', null, 'Columns'), h('th', null, 'Date'), h('th', null, 'Meetings'), h('th', null, 'Guests'))),
       h('tbody', null, parsed.blocks.map((b, i) => h('tr', null,
-        h('td', null, b.label || `Ngày ${i + 1}`), h('td', null, b.range), h('td', null, dateInputs[i]),
+        h('td', null, b.label || `Day ${i + 1}`), h('td', null, b.range), h('td', null, dateInputs[i]),
         h('td', { class: 'num' }, b.meetings), h('td', { class: 'num' }, b.guests)))))) : null;
 
-    const roomDefsTable = parsed.roomDefs.length ? h('p', { class: 'small' }, h('strong', null, 'Phòng: '),
-      parsed.roomDefs.map((d) => `${d.name}${d.capacity ? ` (${d.capacity} chỗ)` : ''}`).join(', ')) : null;
+    const roomDefsTable = parsed.roomDefs.length ? h('p', { class: 'small' }, h('strong', null, 'Rooms: '),
+      parsed.roomDefs.map((d) => `${d.name}${d.capacity ? ` (${d.capacity} seats)` : ''}`).join(', ')) : null;
     const extra = parsed.roomDefs.length ? S.rooms.filter((r) => !parsed.roomDefs.some((d) => d.id === r.id)) : [];
     removeBox = extra.length ? h('input', { type: 'checkbox', checked: true }) : null;
 
     const roomTable = !parsed.blocks.length && parsed.rooms.length ? h('div', { class: 'scroll-x' }, h('table', { class: 'preview' },
-      h('thead', null, h('tr', null, h('th', null, 'Sheet'), h('th', null, 'Phòng'), h('th', null, 'Người trực'), h('th', null, 'Ngày'), h('th', null, 'Khách'))),
+      h('thead', null, h('tr', null, h('th', null, 'Sheet'), h('th', null, 'Room'), h('th', null, 'Staff'), h('th', null, 'Date'), h('th', null, 'Guests'))),
       h('tbody', null, parsed.rooms.map((r) => h('tr', null,
         h('td', null, r.sheetName),
         h('td', null, r.name || roomName(r.room_id)),
-        h('td', null, r.emails.length ? r.emails.join(', ') : h('span', { class: 'error' }, 'chưa điền')),
-        h('td', null, r.date ? fmtDate(r.date) : `${fmtDate(S.date)} (đang chọn)`),
+        h('td', null, r.emails.length ? r.emails.join(', ') : h('span', { class: 'error' }, 'not set')),
+        h('td', null, r.date ? fmtDate(r.date) : `${fmtDate(S.date)} (selected)`),
         h('td', { class: 'num' }, r.count)))))) : null;
     const staffEmails = [...new Set(parsed.rooms.flatMap((r) => r.emails))];
 
     preview.replaceChildren(...[
-      h('p', null, h('strong', null, `${parsed.guests.length} khách`),
-        parsed.meetings.length ? `, ${parsed.meetings.length} cuộc họp` : '',
-        parsed.blocks.length ? ` trong ${parsed.blocks.length} ngày` : parsed.rooms.length ? ` trong ${parsed.rooms.length} phòng` : '',
-        '. Khách đã có sẵn (trùng tên + công ty trong cùng phòng, khung giờ) sẽ được bỏ qua.'),
-      parsed.blocks.length ? h('p', { class: 'small' }, 'Chọn ngày cho từng khối cột:') : null,
+      h('p', null, h('strong', null, `${parsed.guests.length} guests`),
+        parsed.meetings.length ? `, ${parsed.meetings.length} meetings` : '',
+        parsed.blocks.length ? ` over ${parsed.blocks.length} days` : parsed.rooms.length ? ` in ${parsed.rooms.length} rooms` : '',
+        '. Guests already on the site (same name + company in the same room and slot) are not added twice.'),
+      parsed.blocks.length ? h('p', { class: 'small' }, 'Pick the date for each column block:') : null,
       blockTable, roomDefsTable,
       removeBox ? h('label', { class: 'field checkbox' }, removeBox,
-        `Xoá phòng không có trong file: ${extra.map((r) => r.name).join(', ')} (chỉ khi phòng chưa có khách)`) : null,
+        `Delete rooms not in the file: ${extra.map((r) => r.name).join(', ')} (only if they have no guests)`) : null,
       roomTable,
       h('label', { class: 'field checkbox sync-box' }, syncBox,
-        h('span', null, h('strong', null, 'Đồng bộ với file'), ': khách không còn trong file sẽ chuyển sang "Đã huỷ", cuộc họp không còn sẽ bị xoá. ',
-          'Người đã check-in và khách walk-in luôn được giữ. Chỉ áp dụng cho các phòng & ngày có trong file.')),
+        h('span', null, h('strong', null, 'Sync with file'), ': guests no longer in the file become "Cancelled", meetings no longer in the file are deleted. ',
+          'Checked-in guests and walk-ins are always kept. Only rooms and dates in the file are affected.')),
       staffEmails.length ? h('p', { class: 'small muted' },
-        `Người trực sẽ được thêm vào Nhân sự và phân công đúng phòng: ${staffEmails.join(', ')}`) :
+        `These staff will be added and assigned to their rooms: ${staffEmails.join(', ')}`) :
         parsed.blocks.length ? h('p', { class: 'small muted' },
-          'File không có dòng email người trực — phân công người trực ở tab Nhân sự sau khi nhập.') : null,
+          'The file has no staff email row — assign room staff in the Staff tab after importing.') : null,
       parsed.errors.length ? h('details', { open: parsed.errors.length < 6 },
-        h('summary', { class: 'error' }, `${parsed.errors.length} cảnh báo (phần lỗi sẽ bỏ qua)`),
+        h('summary', { class: 'error' }, `${parsed.errors.length} warnings (those parts are skipped)`),
         h('ul', { class: 'small' }, parsed.errors.slice(0, 100).map((e) => h('li', null, e)))) : null,
     ].filter(Boolean));
     importBtn.disabled = !parsed.guests.length && !parsed.meetings.length && !parsed.rooms.some((r) => r.emails.length);
@@ -1341,50 +1341,50 @@ function importFile() {
 
   const importBtn = h('button', { type: 'button', class: 'btn primary', disabled: true, onclick: async () => {
     const blockDates = dateInputs.map((i) => i.value);
-    if (blockDates.some((d) => !d)) return toast('Chọn ngày cho tất cả các khối', 'error');
-    if (new Set(blockDates).size !== blockDates.length) return toast('Mỗi khối phải là một ngày khác nhau', 'error');
+    if (blockDates.some((d) => !d)) return toast('Pick a date for every block', 'error');
+    if (new Set(blockDates).size !== blockDates.length) return toast('Each block must be a different date', 'error');
     importBtn.disabled = true;
-    importBtn.textContent = 'Đang nhập…';
+    importBtn.textContent = 'Importing…';
     try {
       const r = await runImport(parsed, blockDates, removeBox?.checked, syncBox.checked, async (plan) => {
         if (!plan.cancel.length && !plan.restore.length && !plan.mDelete.length) return true;
         const names = (list) => list.slice(0, 8).map((g) => `${g.full_name} (${roomName(g.room_id)}, ${hhmm(slotById(g.slot_id)?.start_time)}, ${fmtDate(g.event_date)})`).join('; ')
-          + (list.length > 8 ? `; … và ${list.length - 8} người khác` : '');
+          + (list.length > 8 ? `; … and ${list.length - 8} more` : '');
         return confirmBox([
-          `Thêm mới: ${plan.add.length} khách.`,
-          plan.cancel.length ? `Huỷ ${plan.cancel.length} khách không còn trong file: ${names(plan.cancel)}.` : '',
-          plan.restore.length ? `Khôi phục ${plan.restore.length} khách đã huỷ: ${names(plan.restore)}.` : '',
-          plan.mDelete.length ? `Xoá ${plan.mDelete.length} cuộc họp không còn trong file: ${plan.mDelete.map((m) => `${m.title} (${roomName(m.room_id)})`).join(', ')}.` : '',
-          'Tiếp tục?',
-        ].filter(Boolean).join('\n\n'), 'Đồng bộ');
+          `New guests: ${plan.add.length}.`,
+          plan.cancel.length ? `Cancel ${plan.cancel.length} guests no longer in the file: ${names(plan.cancel)}.` : '',
+          plan.restore.length ? `Restore ${plan.restore.length} cancelled guests: ${names(plan.restore)}.` : '',
+          plan.mDelete.length ? `Delete ${plan.mDelete.length} meetings no longer in the file: ${plan.mDelete.map((m) => `${m.title} (${roomName(m.room_id)})`).join(', ')}.` : '',
+          'Continue?',
+        ].filter(Boolean).join('\n\n'), 'Sync');
       });
-      if (!r) { importBtn.disabled = false; importBtn.textContent = 'Nhập dữ liệu'; return; }
-      toast(`Đã nhập ${r.guests} khách` + (r.dup ? `, ${r.dup} giữ nguyên` : '') +
-        (r.dupInFile ? `, bỏ ${r.dupInFile} dòng trùng trong file` : '') +
-        (r.cancelled ? `, huỷ ${r.cancelled}` : '') + (r.restored ? `, khôi phục ${r.restored}` : '') +
-        (r.meetingsDeleted ? `, xoá ${r.meetingsDeleted} cuộc họp` : '') +
-        (r.meetings ? `, thêm/sửa ${r.meetings} cuộc họp` : '') +
-        (r.staff ? `, thêm ${r.staff} người trực` : '') + (r.assign ? `, ${r.assign} phân công` : '') +
-        (r.roomsRemoved ? `, xoá ${r.roomsRemoved} phòng thừa` : '') +
-        (r.roomsKept.length ? ` (giữ ${r.roomsKept.join(', ')} vì đang có khách)` : ''), 'success');
+      if (!r) { importBtn.disabled = false; importBtn.textContent = 'Import'; return; }
+      toast(`Imported ${r.guests} guests` + (r.dup ? `, ${r.dup} unchanged` : '') +
+        (r.dupInFile ? `, ${r.dupInFile} duplicate rows in file skipped` : '') +
+        (r.cancelled ? `, ${r.cancelled} cancelled` : '') + (r.restored ? `, ${r.restored} restored` : '') +
+        (r.meetingsDeleted ? `, ${r.meetingsDeleted} meetings deleted` : '') +
+        (r.meetings ? `, ${r.meetings} meetings added/updated` : '') +
+        (r.staff ? `, ${r.staff} staff added` : '') + (r.assign ? `, ${r.assign} room assignments` : '') +
+        (r.roomsRemoved ? `, ${r.roomsRemoved} unused rooms deleted` : '') +
+        (r.roomsKept.length ? ` (kept ${r.roomsKept.join(', ')} because they have guests)` : ''), 'success');
       close();
       if (blockDates.length && !blockDates.includes(S.date)) S.date = [...blockDates].sort()[0];
-      await reloadConfig('Đã cập nhật phòng & ngày');
+      await reloadConfig('Rooms and dates updated');
       await refresh();
     } catch (e) {
       toast(e.message, 'error');
-      importBtn.disabled = false; importBtn.textContent = 'Nhập dữ liệu';
+      importBtn.disabled = false; importBtn.textContent = 'Import';
       await refresh();
     }
-  } }, 'Nhập dữ liệu');
+  } }, 'Import');
 
-  const close = openModal('Nhập danh sách từ Excel / CSV', h('div', { class: 'stack' },
-    h('p', { class: 'small' }, 'Nhận 2 kiểu file: ', h('strong', null, 'file master'),
-      ' (hàng tiêu đề "Room 6 (60) | Room 5 (40) …", mỗi khối cột là 1 ngày, ô ở hàng giờ là tên cuộc họp, bên dưới là khách) hoặc ',
-      h('strong', null, 'file mẫu mỗi phòng 1 sheet'), '.'),
+  const close = openModal('Import from Excel / CSV', h('div', { class: 'stack' },
+    h('p', { class: 'small' }, 'Two layouts are supported: the ', h('strong', null, 'master file'),
+      ' (header row "Room 6 (60) | Room 5 (40) …", one column block per day, the cell on each time row is the meeting, guests below it) or a ',
+      h('strong', null, 'workbook with one sheet per room'), '.'),
     h('div', { class: 'toolbar wrap-row' },
-      h('a', { class: 'btn small', href: 'mau-master.xlsx', download: true }, 'Mẫu dạng master'),
-      h('a', { class: 'btn small', href: 'mau-danh-sach.xlsx', download: true }, 'Mẫu mỗi phòng 1 sheet'),
-      h('a', { class: 'btn small', href: 'du-lieu-mau.xlsx', download: true }, 'Dữ liệu giả để chạy thử')),
-    file, preview), [h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Đóng'), importBtn]);
+      h('a', { class: 'btn small', href: 'template-master.xlsx', download: true }, 'Master template'),
+      h('a', { class: 'btn small', href: 'template-per-room.xlsx', download: true }, 'One-sheet-per-room template'),
+      h('a', { class: 'btn small', href: 'sample-data.xlsx', download: true }, 'Sample data to try')),
+    file, preview), [h('button', { type: 'button', class: 'btn', onclick: () => close() }, 'Close'), importBtn]);
 }

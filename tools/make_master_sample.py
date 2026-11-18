@@ -1,12 +1,12 @@
-"""Tạo docs/mau-master.xlsx: mẫu ẩn danh theo đúng bố cục file master (3 ngày × 6 phòng, khung giờ theo hàng).
+"""Create docs/template-master.xlsx: anonymised sample in the master layout (3 days × 6 rooms, time slots as rows).
 
-Bố cục:
-  Hàng 1 : ngày của từng khối (ô gộp phía trên mỗi khối)
-  Hàng 2 : "Room 6 (60)" … "Room 1 (10)"  — số trong ngoặc là sức chứa
-  Hàng 4 : "Trực phòng (email)" — email người được xem phòng đó (tuỳ chọn)
-  Hàng giờ: cột giờ = 09:00…16:00, ô mỗi phòng = tên cuộc họp "MÃ n - NGƯỜI CHỦ TRÌ"
-  Các dòng dưới: khách "Tên - Quỹ"
-Chạy: python3 tools/make_master_sample.py
+Layout:
+  Row 1 : date of each block (merged cell above each block)
+  Row 2 : "Room 6 (60)" … "Room 1 (10)"  — number in brackets = capacity
+  Row 4 : "Room staff (email)" — who may see that room (optional)
+  Time rows: time column = 09:00…16:00, each room cell = meeting "TICKER n - HOST"
+  Rows below: guests "Name - Fund"
+Run: python3 tools/make_master_sample.py
 """
 import datetime
 import random
@@ -62,10 +62,10 @@ for d in range(3):
     tcol = 1 + d * 8  # A, I, Q
     first = tcol + 1
     ws.merge_cells(start_row=1, start_column=first, end_row=1, end_column=first + 5)
-    c = ws.cell(row=1, column=first, value=f"Ngày {d + 1} - {DAYS[d]}")
+    c = ws.cell(row=1, column=first, value=f"Day {d + 1} - {DAYS[d]}")
     c.font = Font(name=F, bold=True, size=12)
     c.alignment = Alignment(horizontal="center")
-    lab = ws.cell(row=4, column=tcol, value="Trực phòng (email)")
+    lab = ws.cell(row=4, column=tcol, value="Room staff (email)")
     lab.font = Font(name=F, bold=True, size=9)
     lab.alignment = Alignment(wrap_text=True)
     for ri, (room, cap) in enumerate(ROOMS):
@@ -99,8 +99,8 @@ for d in range(3):
     lc.font = Font(name=F, bold=True, color="808080")
     ws.cell(row=time_rows["lunch"], column=first, value="").font = Font(name=F)
 
-note = ws.cell(row=6, column=1, value="Ô vàng hàng 4: email người trực từng phòng (để trống được — phân công sau ở tab Nhân sự). Hàng 1: ngày của khối.")
+note = ws.cell(row=6, column=1, value="Yellow cells in row 4: email of the staff for each room (optional — can be assigned later in the Staff tab). Row 1: date of each block.")
 note.font = Font(name=F, italic=True, size=9, color="808080")
 ws.freeze_panes = "B3"
-wb.save("docs/mau-master.xlsx")
-print("docs/mau-master.xlsx", sum(len(g) for _, g in plan.values()), "khách,", len(plan), "cuộc họp")
+wb.save("docs/template-master.xlsx")
+print("docs/template-master.xlsx", sum(len(g) for _, g in plan.values()), "guests,", len(plan), "meetings")

@@ -30,7 +30,7 @@ create table if not exists public.time_slots (
 -- Cài đặt chung (1 dòng duy nhất)
 create table if not exists public.settings (
   id          boolean primary key default true check (id),
-  event_name  text not null default 'Sự kiện',
+  event_name  text not null default 'Event',
   capacity    smallint not null default 10 check (capacity > 0),
   event_dates date[] not null default '{}'
 );
@@ -176,7 +176,7 @@ begin
   -- Kiểm tra quyền trước (trigger chạy trước RLS WITH CHECK), tránh lộ thông tin phòng khác
   if not v_admin and auth.uid() is not null
      and not public.can_access_room(new.room_id, new.event_date) then
-    raise exception 'Bạn không có quyền với phòng này' using errcode = '42501';
+    raise exception 'You do not have access to this room' using errcode = '42501';
   end if;
 
   -- Người trực không được chuyển khách sang phòng/khung giờ/ngày khác
@@ -184,7 +184,7 @@ begin
     if new.room_id    is distinct from old.room_id
        or new.slot_id    is distinct from old.slot_id
        or new.event_date is distinct from old.event_date then
-      raise exception 'Chỉ admin mới được chuyển khách sang phòng/khung giờ khác'
+      raise exception 'Only an admin can move a guest to another room or time slot'
         using errcode = '42501';
     end if;
   end if;
@@ -226,7 +226,7 @@ begin
        and a.slot_id = new.slot_id and a.status <> 'cancelled'
        and a.id <> new.id;
     if v_count >= v_capacity then
-      raise exception 'Khung giờ này đã đủ % khách. Liên hệ admin để thêm.', v_capacity
+      raise exception 'This time slot is full (% guests). Ask an admin to add more.', v_capacity
         using errcode = 'P0001';
     end if;
   end if;
@@ -357,7 +357,7 @@ begin
   end if;
   return jsonb_build_object('error', jsonb_build_object(
     'http_code', 403,
-    'message', 'Email này chưa được cấp quyền truy cập. Vui lòng liên hệ admin.'));
+    'message', 'This email has not been granted access. Please contact an admin.'));
 end;
 $$;
 
@@ -390,8 +390,8 @@ end $$;
 -- 7. DỮ LIỆU MẶC ĐỊNH: 8 phòng, 7 khung giờ
 -- ---------------------------------------------------------------------
 insert into public.rooms (id, name, sort_order) values
-  (1, 'Phòng 1', 1), (2, 'Phòng 2', 2), (3, 'Phòng 3', 3), (4, 'Phòng 4', 4),
-  (5, 'Phòng 5', 5), (6, 'Phòng 6', 6), (7, 'Phòng 7', 7), (8, 'Phòng 8', 8)
+  (1, 'Room 1', 1), (2, 'Room 2', 2), (3, 'Room 3', 3), (4, 'Room 4', 4),
+  (5, 'Room 5', 5), (6, 'Room 6', 6), (7, 'Room 7', 7), (8, 'Room 8', 8)
 on conflict (id) do nothing;
 
 insert into public.time_slots (id, start_time, end_time, label) values
