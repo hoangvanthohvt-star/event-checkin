@@ -217,5 +217,8 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 .room-edit .toolbar input:first-child { flex: 1; min-width: 0; }
 .cap-input { width: 84px; }
 .grid { table-layout: fixed; }
-.grid thead th:first-child { width: 96px; }
-.grid thead th:last-child { width: 56px; }
+.grid thead th:first-child { width: 64px; }
+.grid thead th { vertical-align: bottom; }
+.grid tbody th[scope=row] { text-align: center; font-variant-numeric: tabular-nums; }
+.grid .total-row th, .grid .total-row td { padding-top: 8px; border-top: 1px solid var(--border); }
+.cell { min-height: 68px; justify-content: center; }

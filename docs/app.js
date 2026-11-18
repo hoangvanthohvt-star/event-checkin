@@ -96,6 +96,16 @@ if (SUPABASE_URL.includes('YOUR-PROJECT') || SUPABASE_ANON_KEY.includes('YOUR-')
 }
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Link đăng nhập hết hạn / đã dùng: Supabase trả lỗi trên URL (#error=...). Dọn URL và báo dễ hiểu.
+const LOGIN_ERROR = (() => {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.get('error')) return null;
+  history.replaceState(null, '', location.pathname + location.search);
+  return p.get('error_code') === 'otp_expired'
+    ? 'Link đăng nhập đã hết hạn hoặc đã được dùng. Hãy gửi link mới.'
+    : (p.get('error_description') || 'Đăng nhập không thành công.').replace(/\+/g, ' ');
+})();
 const isAdmin = () => S.me?.role === 'admin';
 const roomName = (id) => S.rooms.find((r) => r.id === id)?.name ?? `Phòng ${id}`;
 const slotById = (id) => S.slots.find((s) => s.id === id);
@@ -226,6 +236,7 @@ function renderLogin() {
     h('div', { class: 'card narrow stack' },
       h('h1', null, 'Đăng nhập'),
       h('p', { class: 'muted' }, 'Dùng email đã được admin cấp quyền.'),
+      LOGIN_ERROR ? h('p', { class: 'error small' }, LOGIN_ERROR) : null,
       h('form', { class: 'stack', onsubmit: send },
         h('label', { for: 'email' }, 'Email'),
         h('input', { id: 'email', name: 'email', type: 'email', required: true, autocomplete: 'email', placeholder: 'ten@congty.com' }),
@@ -488,28 +499,29 @@ function Overview() {
   const totalIn = S.rows.filter((r) => r.status === 'checked_in').length;
   const walkIns = live.filter((r) => r.is_walk_in).length;
 
+  // Giống file Excel: giờ theo cột dọc (hàng), phòng theo hàng ngang (cột)
+  const cellBtn = (room, s) => {
+    const cell = S.rows.filter((r) => r.room_id === room.id && r.slot_id === s.id);
+    const cap = capOf(room.id);
+    const n = activeCount(cell);
+    const inN = cell.filter((r) => r.status === 'checked_in').length;
+    const m = meetingOf(room.id, s.id);
+    const cls = n > cap ? 'over' : n === cap ? 'full' : (n === 0 && !m) ? 'zero' : '';
+    return h('td', null, h('button', { class: `cell ${cls}`,
+      title: `${room.name} · ${s.label}${m ? ' · ' + meetingText(m) : ''}: ${n} khách, ${inN} đã check-in`,
+      onclick: () => { Object.assign(S.filters, { room: String(room.id), slot: String(s.id), status: '', q: '' }); S.tab = 'list'; render(); } },
+      m ? h('span', { class: 'cell-title' }, m.title) : null,
+      h('span', { class: 'cell-n' }, `${n}/${cap}`), h('span', { class: 'cell-in' }, `✓ ${inN}`)));
+  };
   const table = h('table', { class: 'grid' },
-    h('thead', null, h('tr', null, h('th', null, 'Phòng'),
-      S.slots.map((s) => h('th', null, hhmm(s.start_time))), h('th', null, 'Tổng'))),
-    h('tbody', null, S.rooms.map((room) => {
-      const rr = S.rows.filter((r) => r.room_id === room.id);
-      const cap = capOf(room.id);
-      return h('tr', null,
-        h('th', { scope: 'row' }, room.name, room.capacity ? h('div', { class: 'muted small' }, `${room.capacity} chỗ`) : null),
-        S.slots.map((s) => {
-          const cell = rr.filter((r) => r.slot_id === s.id);
-          const n = activeCount(cell);
-          const inN = cell.filter((r) => r.status === 'checked_in').length;
-          const m = meetingOf(room.id, s.id);
-          const cls = n > cap ? 'over' : n === cap ? 'full' : (n === 0 && !m) ? 'zero' : '';
-          return h('td', null, h('button', { class: `cell ${cls}`,
-            title: `${room.name} · ${s.label}${m ? ' · ' + meetingText(m) : ''}: ${n} khách, ${inN} đã check-in`,
-            onclick: () => { Object.assign(S.filters, { room: String(room.id), slot: String(s.id), status: '', q: '' }); S.tab = 'list'; render(); } },
-            m ? h('span', { class: 'cell-title' }, m.title) : null,
-            h('span', { class: 'cell-n' }, `${n}/${cap}`), h('span', { class: 'cell-in' }, `✓ ${inN}`)));
-        }),
-        h('td', { class: 'num' }, `${activeCount(rr)}`));
-    })));
+    h('thead', null, h('tr', null, h('th', null, 'Giờ'),
+      S.rooms.map((room) => h('th', null, room.name, h('div', { class: 'muted small' }, `${capOf(room.id)} chỗ`))))),
+    h('tbody', null,
+      S.slots.map((s) => h('tr', null,
+        h('th', { scope: 'row' }, hhmm(s.start_time)),
+        S.rooms.map((room) => cellBtn(room, s)))),
+      h('tr', { class: 'total-row' }, h('th', { scope: 'row' }, 'Tổng'),
+        S.rooms.map((room) => h('td', { class: 'num' }, `${activeCount(S.rows.filter((r) => r.room_id === room.id))}`)))));
 
   return [
     h('div', { class: 'stats' },
